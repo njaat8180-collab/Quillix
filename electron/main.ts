@@ -233,19 +233,31 @@ async function waitForServer(): Promise<boolean> {
 }
 
 function stopServerProcess(): void {
-  if (serverProcess && ownsServerProcess) {
-    log('stopping NUVRO AI server...');
-    try {
-      const child = serverProcess;
-      // Detach exit handling so quit is not interrupted.
-      serverProcess = null;
-      ownsServerProcess = false;
-      child.removeAllListeners('exit');
-      child.kill();
-    } catch (err) {
-      log('error stopping server:', err);
-    }
+  const child = serverProcess;
+  if (!child || !ownsServerProcess) return;
+  log('stopping NUVRO AI server...');
+  // Detach exit handling so quit is not interrupted.
+  serverProcess = null;
+  ownsServerProcess = false;
+  try {
+    child.removeAllListeners('exit');
+  } catch {
+    // Listener cleanup is best-effort; never block shutdown on it.
   }
+  try {
+    child.kill();
+  } catch (err) {
+    log('error stopping server:', err);
+    return;
+  }
+  // Graceful first, then force. Without the escalation a child that ignores
+  // SIGTERM (a wedged Node server mid-request) keeps the app alive: the quit
+  // sequence stalls behind a process nobody is waiting on.
+  setTimeout(() => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    log('server child did not exit on SIGTERM — sending SIGKILL');
+    try { child.kill('SIGKILL'); } catch { /* already gone */ }
+  }, 5000).unref();
 }
 
 /* ------------------------------------------------------------------ */
@@ -439,3 +451,20 @@ if (!gotLock) {
     });
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Fault visibility (do not swallow)                                   */
+/* ------------------------------------------------------------------ */
+
+// These handlers exist to REPORT faults, never to hide them. Without them an
+// unhandled rejection in the main process is silent in the console and leaves
+// the user with a window that behaves oddly for no visible reason.
+// Renderer faults are intentionally NOT routed through process.exit: the
+// window stays alive so the user can read the error and report it.
+process.on('unhandledRejection', (reason) => {
+  console.error('[nuvro-ai] unhandled rejection:', reason instanceof Error ? reason.stack ?? reason.message : reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[nuvro-ai] uncaught exception:', error?.stack ?? error);
+});

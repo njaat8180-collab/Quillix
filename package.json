@@ -65,6 +65,7 @@
     "test:live-provider:mock": "node scripts/smoke/live-provider-matrix.mjs",
     "test:release-artifact": "node scripts/smoke/release-artifact-check.mjs",
     "test:release-fingerprint": "node --test scripts/smoke/release-source-fingerprint.test.mjs",
+    "test:dependency-audit": "node scripts/smoke/dependency-audit.mjs",
     "test:release-signature": "node scripts/smoke/release-signature-check.mjs",
     "test:settings-health": "node scripts/smoke/settings-health-contract.mjs",
     "test:preview-ui": "node scripts/smoke/preview-ui-contract.mjs",
