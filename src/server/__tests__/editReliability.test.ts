@@ -8,6 +8,9 @@ import { TerminalService } from '../terminal.js';
 import { GitService } from '../git.js';
 import { CodebaseIndexer } from '../indexer.js';
 import { SettingsStore, DEFAULT_SETTINGS } from '../settings.js';
+import { WorkspaceVerifier } from '../verifier.js';
+import { AgentEngine } from '../agentEngine.js';
+import type { AIProvider } from '../qwen.js';
 
 /**
  * Reliability contract for focused edits and thin tool surfaces:
@@ -234,5 +237,59 @@ describe('edit_file whitespace recovery and tool-surface reliability', () => {
     const log = await exec('git_log', { limit: 'not-a-number' });
     // Non-repo workspace: the call must resolve, not crash.
     expect(log.success).toBe(true);
+  });
+
+  // ------------------------------------------------------------------ §M6 ---
+  // End-to-end through the AgentEngine: a small model quoting an oldString
+  // with the wrong indentation must still complete the requested fix in one
+  // turn, and the user acceptance check must pass for real.
+
+  it('agent engine completes an existing-project fix when the quote has wrong indentation', async () => {
+    const source = [
+      'function formatTotal(cents) {',
+      '  const dollars = cents / 100;',
+      '  return dollars.toFixed(2);',
+      '}',
+      'module.exports = { formatTotal };',
+    ].join('\n');
+    fs.writeFileSync(path.join(testDir, 'money.cjs'), source);
+    const provider = {
+      async chatWithToolsStream() {
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'indented-edit',
+            name: 'edit_file',
+            args: {
+              filePath: 'money.cjs',
+              // Quoted without the function's one-level indentation.
+              oldString: 'const dollars = cents / 100;',
+              newString: 'const dollars = Math.round(cents) / 100;',
+            },
+          }],
+        };
+      },
+    } as unknown as AIProvider;
+    const terminal = new TerminalService();
+    const git = new GitService(terminal);
+    const indexer = new CodebaseIndexer(workspace, git);
+    const settings = new SettingsStore(path.join(testDir, '.quillix-test-settings.json'));
+    settings.update({ ...DEFAULT_SETTINGS, autoApplyDiffs: true, terminalApproval: false });
+    const registry = new ToolRegistry(workspace, terminal, git, indexer, settings);
+    const engine = new AgentEngine(provider, registry, indexer, new WorkspaceVerifier(workspace, terminal));
+    const command = 'node -e "const {formatTotal}=require(\'./money.cjs\'); if (formatTotal(1234) !== \'12.34\') process.exit(1);"';
+    const result = await engine.run({
+      userPrompt: 'Fix rounding in money.cjs.',
+      mode: 'agent',
+      conversationHistory: [],
+      verificationCommands: [command],
+      requestApproval: async () => true,
+      settings: { maxAutonomousTurns: 6, temperature: 0, autoApplyDiffs: true },
+    });
+    // The tolerance path is what made this a single-turn fix.
+    expect(result.toolResults.some(tool => tool.toolName === 'edit_file' && tool.success)).toBe(true);
+    expect(result.toolResults.some(tool => tool.toolName === 'edit_file' && !tool.success)).toBe(false);
+    expect(result.finalText).toContain('User acceptance checks passed');
+    expect(fs.readFileSync(path.join(testDir, 'money.cjs'), 'utf8')).toContain('Math.round(cents)');
   });
 });
