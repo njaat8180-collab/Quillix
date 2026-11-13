@@ -81,6 +81,7 @@
     "test:provider-model-failover": "vitest run --pool=threads --maxWorkers=1 --isolate=false src/server/__tests__/providerModelCatalog.test.ts src/server/__tests__/providerModelFailover.test.ts src/server/__tests__/universalProvider.test.ts",
     "test:self-healing": "node scripts/smoke/self-healing-contract.mjs",
     "test:ui-accessibility": "node scripts/smoke/ui-accessibility-contract.mjs",
+    "test:reduced-motion": "node scripts/smoke/reduced-motion-contract.mjs",
     "test:dead-controls": "node scripts/smoke/dead-controls-contract.mjs",
     "test:inline-edit": "node scripts/smoke/inline-edit-contract.mjs",
     "test:auto-test": "node scripts/smoke/auto-test-contract.mjs",
