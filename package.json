@@ -39,6 +39,7 @@
     "test:verification-http": "node scripts/smoke/verification-http.mjs",
     "test:website-behavior": "tsx scripts/smoke/website-behavior-check.ts",
     "test:electron-browser": "electron scripts/smoke/electron-browser-e2e.cjs",
+    "test:electron-launch": "node scripts/smoke/electron-launch-contract.cjs",
     "lint": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build:electron": "npm run build",
@@ -103,7 +104,6 @@
   },
   "dependencies": {
     "@babel/parser": "8.0.7",
-    "@composio/core": "^0.27.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tavily/core": "^0.7.14",
