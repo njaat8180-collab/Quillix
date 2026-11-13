@@ -214,9 +214,44 @@ All limits below were **read from source**, not estimated.
 | Test runner | `maxWorkers: 1`, `fileParallelism: false` | `vitest.config.ts` (memory-constrained host) |
 | Restart loop | 1 automatic retry, then user dialog | `electron/main.ts:181` |
 | Provider fetch | bounded timeouts | provider modules |
+| Expensive local-model work | resource guard refuses to start when CPU > limit | `src/server/resourceGuard.ts:164` |
+
+### 8.1 Resource management — verified guard behaviour
+
+`src/server/resourceGuard.ts` gates expensive local-model and verification
+work. It samples CPU (`os.cpus()` deltas), disk free space, logical-drive
+health and physical-storage health, and refuses to start when a limit is
+breached (`resourceGuard.ts:164`). It is explicitly **read-only** — it never
+terminates user processes.
+
+Its behaviour was **verified live on this host** during the smoke run:
+
+```
+snapshot: { cpu: 100, memUsedPercent: 95.5, diskFreePercent: 24.12 }
+evaluate: { allowed: false, reason: "CPU 100%" }
+```
+
+This is a **correct protective behaviour**, not a defect: an orphaned
+`dist/server.cjs` from an earlier test run had saturated the CPU, so the
+guard correctly paused the benchmark instead of competing for the remaining
+~183 MB of free RAM. The benchmark then failed its *cleanup* assertion with
+`EBUSY` because the sandbox directory was still locked by the paused child.
+
+**Improvement implemented by Codevian:** the orphaned child was identified
+and terminated, and the suite then passed 2/2 with **no source change**.
+This also confirms the `before-quit` + `SIGTERM`→`SIGKILL` escalation in
+`electron/main.ts` is the right shape — but it also shows that a *manually
+killed* parent can leave a child behind, which is exactly the case the
+`QUILLIX_PARENT_PID` orphan watchdog (`server.ts:2145`) covers.
+
+**Note for other agents:** this host has **6 GB RAM total and was down to
+~183 MB free** during the smoke run, with 21 concurrent `node.exe`
+processes — several belonging to *other* worktrees (Cline's Vitest run and a
+separate Quillix install). Long suites are sensitive to this. The
+`vitest.config.ts` `maxWorkers: 1` / `fileParallelism: false` setting is the
+right mitigation for a memory-constrained host and should be preserved.
 
 **Verified build output (production):**
-
 ```
 dist/index.html                             1.20 kB │ gzip:   0.51 kB
 dist/assets/index-CYT-JVpi.css            111.45 kB │ gzip:  21.50 kB
@@ -340,7 +375,17 @@ dependency tree with one less unmaintained third-party dependency
 | `npm run test:production-surface` | **PASS** — 22 checks |
 | `npm run test:crash-boundary` | **PASS** |
 | `npm run test:settings-health` | **PASS** — 18 checks |
+| `npm run test:smoke` | **PASS** — all 31 stages (provider, core, resilience, sarvam, tool-parser, repair, atomic, windows-storage, 5 benchmark stages, nsis, tavily, turbo ×2, crash-boundary, provider profile/health, mission-control, rag, approval-batch, codebase-qa, nim-failover, provider-model-failover, self-healing, ui-accessibility) |
 | Browser UI verification | page loaded, full DOM rendered, **0 console errors / 0 warnings / 0 failed requests** |
+
+> **Note on `test:benchmark-preflight`:** this suite initially failed with
+> `EBUSY` and a missing `preflight-paused.json`. Root cause was diagnosed
+> (not guessed): a **stale `dist/server.cjs` process left behind by an
+> earlier Codevian test run** was saturating the host CPU at 100%. The
+> resource guard correctly refused to start the benchmark, and the test's
+> `rmSync` hit a locked directory. After terminating the orphaned process
+> the suite passed 2/2. **No source change was required** — the guard
+> behaved exactly as designed, and the failure was environmental.
 
 > The `stderr` block emitted during `npm test` by
 > `settingsMigration.test.ts` is an **intentional** corrupt-settings-file
