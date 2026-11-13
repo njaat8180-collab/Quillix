@@ -233,6 +233,13 @@ All summary elements across 14 components now have proper aria-expanded:
     buffer is never replaced; both versions are read and the dialog opens.
   - Overwrite deliberately omits expectedContent so the guard the user just
     overrode is not re-checked; reload clears the dirty flag on the new version.
+- `WorkspaceView.tsx` refresh-time staleness check: every workspace refresh
+  (agent run finished, undo/rollback, git restore, auto-repair, tool panel)
+  re-reads each unsaved buffer against disk. A file that changed without a
+  live `patch` event now raises the same dialog, so no external write can
+  silently fight an open buffer. Already-surfaced on-disk signatures are not
+  re-raised until the file changes again, and a failed read is never treated
+  as a conflict.
 
 ## BLOCKERS
 
@@ -247,6 +254,21 @@ All summary elements across 14 components now have proper aria-expanded:
 | 2026-11-12 | UI contracts | ✅ PASS | production-surface, chat-ui, ui-accessibility, dead-controls, inline-edit, crash-boundary, undo-changeset exit 0 |
 | 2026-11-12 | tsc --noEmit (changed files) | ✅ PASS | server.ts / apiBridge.ts / WorkspaceView.tsx / EditConflictDialog.tsx clean; repo-wide lint red only from the unrelated _probe4.test.ts probe |
 | 2026-11-12 | vite build | ✅ PASS | 2163 modules, exit 0 |
+| 2026-11-13 | 28 contract smokes | ✅ 27/28 | Only `benchmark-artifact-contract` fails: stored `.quillix-smoke/ollama-model-matrix.json` is protocol v6, the gate requires v7 (63 live Ollama runs) - Blocker B2/B11, unrelated to M2.5 |
+| 2026-11-13 | Full vitest suite | ✅ PASS | 83 files / 835 tests, exit 0 |
+| 2026-11-13 | dead-controls contract | ✅ PASS | 44 components scanned; synthetic dead button still detected, arrow-attribute button no longer misreported |
+
+
+
+### Contract hardening - dead-controls (2026-11-13)
+
+`scripts/smoke/dead-controls-contract.mjs` extracted button opening tags with
+`/<button\b[^>]*>/`. That regex stops at the first `>`, which is also the arrow
+of an inline attribute such as `ref={(el) => { ... }}`, so a fully wired button
+was truncated mid-tag and misreported as a dead control. Tag extraction now
+tracks bracket depth and stops only at the closing `>` of the real opening tag.
+Proven both directions against a synthetic tree: a genuinely handler-less
+button is still reported, and the arrow-attribute button is no longer flagged.
 
 ## VERIFICATION LOG
 

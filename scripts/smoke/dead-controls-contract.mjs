@@ -45,11 +45,42 @@ const tsxFiles = [];
 tsxFiles.sort();
 
 const OPERABLE = /onClick=|onKeyDown=|onKeyPress=|onPointerDown=|onPointerUp=|onMouseDown=|type="submit"/;
+
+/** Extract every <button ...> opening tag from a renderer source file.
+ *
+ *  A plain /<button\b[^>]*>/ stops at the first `>`, which is also the arrow
+ *  of an inline attribute such as ref={(el) => { ... }}. That truncates the tag
+ *  before its onClick/onKeyDown and misreports a fully wired control as dead.
+ *  Track bracket depth instead, so only the real end of the opening tag
+ *  terminates the match. */
+function buttonOpeningTags(source) {
+  const tags = [];
+  let cursor = 0;
+  for (;;) {
+    const start = source.indexOf('<button', cursor);
+    if (start === -1) break;
+    const boundary = source[start + 7];
+    if (boundary !== undefined && /[A-Za-z0-9_-]/.test(boundary)) { cursor = start + 7; continue; }
+    let depth = 0;
+    let end = -1;
+    for (let i = start + 7; i < source.length; i += 1) {
+      const ch = source[i];
+      if (ch === '{' || ch === '(' || ch === '[') depth += 1;
+      else if (ch === '}' || ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+      else if (ch === '>' && depth === 0) { end = i; break; }
+    }
+    if (end === -1) break;
+    tags.push(source.slice(start, end + 1));
+    cursor = end + 1;
+  }
+  return tags;
+}
+
 const deadControls = [];
 for (const file of tsxFiles) {
   const source = fs.readFileSync(file, 'utf8');
-  for (const match of source.matchAll(/<button\b[^>]*>/g)) {
-    if (!OPERABLE.test(match[0])) deadControls.push(`${path.relative(project, file).replace(/\\/g, '/')}: ${match[0].slice(0, 120)}`);
+  for (const tag of buttonOpeningTags(source)) {
+    if (!OPERABLE.test(tag)) deadControls.push(`${path.relative(project, file).replace(/\\/g, '/')}: ${tag.slice(0, 120)}`);
   }
 }
 assert.equal(deadControls.length, 0, `dead-controls contract: found button controls with no handler:\n${deadControls.join('\n')}`);
