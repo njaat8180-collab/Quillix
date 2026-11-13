@@ -1,0 +1,27 @@
+PASS test:openai :: # fail 0
+PASS test:universal :: # Subtest: partial streaming output fails closed instead of replaying a tool request | ok 11 - partial streaming output fails closed instead of replaying a tool request | # Subtest: Failed settings save is never acknowledged as success or applied in memory
+PASS test:core :: # fail 0
+PASS test:resilience :: # Subtest: repair steps appear after a failure and never before it | ok 2 - repair steps appear after a failure and never before it | # Subtest: requested but unverified steps fail rather than becoming not needed
+PASS test:sarvam-contract :: # Subtest: Sarvam returns actionable sanitized auth failure and never retries 403 | ok 11 - Sarvam returns actionable sanitized auth failure and never retries 403 | # Subtest: Pro-token-budget is an explicit environment opt-in; malformed caps fail safely
+PASS test:tool-parser :: # Subtest: truncated legacy XML tool calls fail closed and remain visible for a retry nudge | ok 4 - truncated legacy XML tool calls fail closed and remain visible for a retry nudge | # Subtest: truncated bare registered tool JSON fails closed instead of becoming prose
+PASS test:repair :: # fail 0
+PASS test:atomic :: # Subtest: a failed atomic write leaves no temporary files or corrupts an existing directory | ok 2 - a failed atomic write leaves no temporary files or corrupts an existing directory | # fail 0
+PASS test:windows-storage-contract :: # fail 0
+PASS test:benchmark-preflight :: # fail 0
+PASS test:benchmark-contract :: # fail 0
+PASS test:benchmark-artifact-contract :: # fail 0
+PASS test:benchmark-summary :: # Subtest: attempted latency and token costs include failed trials without hiding successful-only metrics | ok 1 - attempted latency and token costs include failed trials without hiding successful-only metrics | # Subtest: a pre-provider failure is still counted as an attempt with zero tokens
+PASS test:benchmark-quality :: # fail 0
+PASS test:benchmark-compare :: # fail 0
+PASS test:nsis-fallback-cleanup :: # fail 0
+PASS test:tavily-demo :: # fail 0
+PASS test:turbo-global-state :: {"status":"PASS","files":["src/App.tsx","src/components/DashboardView.tsx","src/shared/providerPacing.ts"],"checks":8}
+FAIL test:crash-boundary :: AssertionError [ERR_ASSERTION]: crash-boundary contract: main.tsx preserves the existing motion config
+PASS test:provider-profile-limits :: {"status":"PASS","file":"src/components/ProviderProfiles.tsx","checks":11}
+PASS test:provider-health-monitor :: {"status":"PASS","files":["src/services/apiBridge.ts","src/components/WorkbenchLayout.tsx","src/shared/types.ts","server.ts","src/server/universal.ts"],"checks":10}
+PASS test:mission-control :: {"status":"PASS","files":[".quillix/mission/*","src/shared/missionState.ts","server.ts","src/services/apiBridge.ts","src/components/MissionControlPanel.tsx","src/components/WorkbenchLayout.tsx",".clinerules/quillix-mission.md","extensions/quillix-mission-control/package.json","extensions/quillix-mission-control/extension.js"],"checks":44}
+PASS test:rag-incremental :: {"status":"PASS","files":["src/server/projectRag.ts","server.ts","src/services/apiBridge.ts","src/server/agentEngine.ts","src/server/__tests__/projectRagIncremental.test.ts"],"checks":22}
+PASS test:approval-batch :: {"status":"PASS","files":["src/server/approvalBatch.ts","src/server/__tests__/approvalBatch.test.ts","server.ts","src/services/apiBridge.ts","src/components/WorkbenchLayout.tsx"],"checks":22}
+PASS test:codebase-qa :: {"status":"PASS","files":["src/server/codebaseQa.ts","src/server/__tests__/codebaseQa.test.ts","server.ts","src/services/apiBridge.ts"],"checks":19}
+PASS test:nim-failover :: > quillix@1.2.0 test:nim-failover | > node scripts/smoke/nim-failover-contract.mjs | nim-failover contract: 42 checks passed
+PASS test:ui-accessibility :: {"status":"PASS","files":["src/components/DiagnosticsModal.tsx","src/components/ToolRegistryPanel.tsx","src/components/TerminalPanel.tsx","src/components/ChatPanel.tsx","src/components/Composer.tsx","src/components/SettingsScreen.tsx","src/components/FileTree.tsx"],"checks":23}

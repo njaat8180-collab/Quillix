@@ -1,0 +1,209 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: system reduced-motion preference is respected by Motion
+    at file:///D:/QUILLIX/Quillix_v1.2.0_Dedicated_OpenAI_Universal_Sarvam_2026-10-12/Quillix/scripts/smoke/chat-ui-contract.mjs:83:46
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: "import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';\n" +
+    "import { motion, AnimatePresence } from 'motion/react';\n" +
+    "import { Cpu, MessageSquarePlus, History, Sparkles, ArrowUpRight, Code2, Bug, TestTube2, ChevronDown, Search, Trash2, Clock3, MessageCircle, X } from 'lucide-react';\n" +
+    "import { AgentActivity, AgentMode, AgentPhase, ChatMessage, FilePatch } from '../shared/types.js';\n" +
+    "import { ChatView, ApprovalCard } from './ChatView.js';\n" +
+    "import { Composer } from './Composer.js';\n" +
+    "import { OllamaState } from './TopHeader.js';\n" +
+    "import { StoredChat } from '../chatStore.js';\n" +
+    "import { QuillixMark } from './QuillixMark.js';\n" +
+    'import { \n' +
+    '  staggerContainerFastVariants,\n' +
+    '  messageVariants,\n' +
+    '  slideUpVariants,\n' +
+    '  popoverVariants,\n' +
+    '  cardHoverVariants,\n' +
+    '  fadeVariants,\n' +
+    '  motionFadeIn,\n' +
+    '  motionSlideUp,\n' +
+    "} from '../animations/index.js';\n" +
+    '\n' +
+    'export interface PendingApproval {\n' +
+    '  approvalId: string;\n' +
+    "  request: { kind: 'terminal' | 'git' | 'file'; title: string; command?: string; reason?: string };\n" +
+    '}\n' +
+    '\n' +
+    'interface ChatPanelProps {\n' +
+    "  /** 'side' = narrow right rail inside the workspace view; 'page' = full chat page. */\n" +
+    "  variant?: 'side' | 'page';\n" +
+    '  messages: ChatMessage[];\n' +
+    '  isWorking: boolean;\n' +
+    '  activities: AgentActivity[];\n' +
+    '  /** Live request-adaptive phase workflow state (agent runs). */\n' +
+    '  phases?: AgentPhase[];\n' +
+    '  /** Files written so far in the current live run. */\n' +
+    '  liveFiles?: string[];\n' +
+    '  streamingText: string;\n' +
+    '  input: string;\n' +
+    '  onInputChange: (value: string) => void;\n' +
+    '  currentFile?: string;\n' +
+    '  verificationCommand?: string;\n' +
+    '  onVerificationCommandChange?: (value: string) => void;\n' +
+    '  onSend: () => void;\n' +
+    '  onStop: () => void;\n' +
+    '  mode: AgentMode;\n' +
+    '  onModeChange: (mode: AgentMode) => void;\n' +
+    "  conversationMode: 'chat' | 'agent';\n" +
+    '  conversationModeReady?: boolean;\n' +
+    "  onConversationModeChange: (mode: 'chat' | 'agent') => void;\n" +
+    '  pendingApproval: PendingApproval | null;\n' +
+    '  onResolveApproval: (approved: boolean) => void;\n' +
+    '  onViewPatch: (patch: FilePatch) => void;\n' +
+    '  onRunAgain: () => void;\n' +
+    '  onFixWithAgent?: (errorLog: string) => void;\n' +
+    '  onRollback?: (taskId: string) => void;\n' +
+    '  onResumeTask?: (taskId: string) => void;\n' +
+    '  onNewChat: () => void;\n' +
+    '  chats: StoredChat[];\n' +
+    '  activeChatId: string | null;\n' +
+    '  onSelectChat: (id: string) => void;\n' +
+    '  onDeleteChat: (id: string) => void;\n' +
+    '  ollama: OllamaState;\n' +
+    '  model?: string;\n' +
+    '  provider?: string;\n' +
+    '  offlineMode?: boolean;\n' +
+    '  sarvamKeyConfigured?: boolean;\n' +
+    "  sarvamConnection?: 'untested' | 'checking' | 'connected' | 'failed';\n" +
+    "  universalConnection?: 'untested' | 'checking' | 'connected' | 'failed';\n" +
+    "  openaiConnection?: 'untested' | 'checking' | 'connected' | 'failed';\n" +
+    "  nvidiaConnection?: 'untested' | 'checking' | 'connected' | 'failed';\n" +
+    '  turboSpeedMode?: boolean;\n' +
+    '  onToggleTurboSpeed?: (next: boolean) => void;\n' +
+    '}\n' +
+    '\n' +
+    '/**\n' +
+    ' * Right-side chat panel: the conversation with Quillix (Normal Chat Mode and\n' +
+    ' * Coding Agent Mode both live here). The center of the app stays reserved\n' +
+    ' * for code; this panel is always available while the agent works.\n' +
+    ' */\n' +
+    'export const ChatPanel: React.FC<ChatPanelProps> = ({\n' +
+    "  variant = 'side',\n" +
+    '  messages,\n' +
+    '  isWorking,\n' +
+    '  activities,\n' +
+    '  phases,\n' +
+    '  liveFiles,\n' +
+    '  streamingText,\n' +
+    '  input,\n' +
+    '  onInputChange,\n' +
+    '  currentFile,\n' +
+    '  verificationCommand,\n' +
+    '  onVerificationCommandChange,\n' +
+    '  onSend,\n' +
+    '  onStop,\n' +
+    '  mode,\n' +
+    '  onModeChange,\n' +
+    '  conversationMode,\n' +
+    '  conversationModeReady = true,\n' +
+    '  onConversationModeChange,\n' +
+    '  pendingApproval,\n' +
+    '  onResolveApproval,\n' +
+    '  onViewPatch,\n' +
+    '  onRunAgain,\n' +
+    '  onFixWithAgent,\n' +
+    '  onRollback,\n' +
+    '  onResumeTask,\n' +
+    '  onNewChat,\n' +
+    '  chats,\n' +
+    '  activeChatId,\n' +
+    '  onSelectChat,\n' +
+    '  onDeleteChat,\n' +
+    '  ollama,\n' +
+    '  model,\n' +
+    "  provider = 'ollama',\n" +
+    '  offlineMode = true,\n' +
+    '  sarvamKeyConfigured = false,\n' +
+    "  sarvamConnection = 'untested', universalConnection = 'untested', openaiConnection = 'untested', nvidiaConnection = 'untested',\n" +
+    '  turboSpeedMode = false, onToggleTurboSpeed,\n' +
+    '}) => {\n' +
+    '  const [historyOpen, setHistoryOpen] = useState(false);\n' +
+    "  const [historyQuery, setHistoryQuery] = useState('');\n" +
+    '  const composerInputRef = useRef<HTMLTextAreaElement>(null);\n' +
+    '  const historyTriggerRef = useRef<HTMLButtonElement>(null);\n' +
+    '\n' +
+    '  // Keyboard accessibility for the history popover (WCAG dialog pattern):\n' +
+    '  // Escape closes it and returns focus to the trigger.\n' +
+    '  useEffect(() => {\n' +
+    '    if (!historyOpen) return;\n' +
+    '    const onKeyDown = (event: KeyboardEvent) => {\n' +
+    "      if (event.key !== 'Escape') return;\n" +
+    '      event.stopPropagation();\n' +
+    '      setHistoryOpen(false);\n' +
+    '      historyTriggerRef.current?.focus();\n' +
+    '    };\n' +
+    "    window.addEventListener('keydown', onKeyDown);\n" +
+    "    return () => window.removeEventListener('keydown', onKeyDown);\n" +
+    '  }, [historyOpen]);\n' +
+    "  const isSarvam = provider === 'sarvam';\n" +
+    "  const isUniversal = provider === 'universal';\n" +
+    "  const isOpenAI = provider === 'openai';\n" +
+    "  const isNvidia = provider === 'nvidia';\n" +
+    "  const statusColor = isOpenAI ? (openaiConnection === 'connected' && !offlineMode ? 'var(--success)' : openaiConnection === 'failed' ? 'var(--danger)' : 'var(--warning)') : isNvidia ? (nvidiaConnection === 'connected' && !offlineMode ? 'var(--success)' : nvidiaConnection === 'failed' ? 'var(--danger)' : 'var(--warning)') : isUniversal ? (universalConnection === 'connected' && !offlineMode ? 'var(--success)' : universalConnection === 'failed' ? 'var(--danger)' : 'var(--warning)') : isSarvam\n" +
+    "    ? (offlineMode || !sarvamKeyConfigured ? 'var(--warning)' : sarvamConnection === 'connected' ? 'var(--success)' : sarvamConnection === 'failed' ? 'var(--danger)' : 'var(--text-muted)')\n" +
+    "    : ollama.state === 'connected' ? 'var(--success)' : ollama.state === 'model-missing' ? 'var(--warning)' : 'var(--danger)';\n" +
+    "  const statusText = isOpenAI ? (offlineMode?'OpenAI blocked (offline)':openaiConnection==='connected'?'OpenAI · Verified':openaiConnection==='failed'?'OpenAI · Test failed':'OpenAI · Not verified') : isNvidia ? (offlineMode ? 'NVIDIA NIM blocked (offline)' : nvidiaConnection === 'connected' ? 'NVIDIA NIM · Verified' : nvidiaConnection === 'failed' ? 'NVIDIA NIM · Test failed' : 'NVIDIA NIM · Not verified') : isUniversal ? (offlineMode ? 'Universal API blocked (offline)' : universalConnection === 'connected' ? 'Universal API · Verified' : universalConnection === 'failed' ? 'Universal API · Test failed' : 'Universal API · Not verified') : isSarvam\n" +
+    "    ? (offlineMode ? 'Sarvam blocked (offline)' : !sarvamKeyConfigured ? 'Sarvam · Key needed' : sarvamConnection === 'connected' ? 'Sarvam verified' : sarvamConnection === 'failed' ? 'Sarvam test failed' : 'Sarvam · Not verified')\n" +
+    "    : ollama.state === 'connected' ? 'Ollama Connected' : ollama.state === 'model-missing' ? 'Model Not Found' : 'Ollama Disconnected';\n" +
+    '\n' +
+    '  const activeChat = chats.find((c) => c.id === activeChatId) || null;\n' +
+    '  const visibleChats = useMemo(() => {\n' +
+    '    const query = historyQuery.trim().toLowerCase();\n' +
+    '    return [...chats]\n' +
+    '      .sort((a, b) => b.updatedAt - a.updatedAt)\n' +
+    '      .filter((chat) => !query || chat.title.toLowerCase().includes(query) || chat.messages.some((message) => message.content.toLowerCase().includes(query)));\n' +
+    '  }, [chats, historyQuery]);\n' +
+    "  const otherCloud = provider === 'groq' || provider === 'grok';\n" +
+    "  const badgeColor = otherCloud ? 'var(--warning)' : statusColor;\n" +
+    "  const badgeText = otherCloud ? `${provider === 'groq' ? 'Groq' : 'Grok'} · ${offlineMode ? 'Blocked (offline)' : 'Verify in Settings'}` : statusText;\n" +
+    '  const lastActivity = activities.length\n' +
+    '    ? activities[activities.length - 1]\n' +
+    '    : messages[messages.length - 1]?.activityLog?.slice(-1)[0];\n' +
+    '  const latestObservability = [...messages].reverse().find((message) => message.observability)?.observability;\n' +
+    '  const latestTokens = latestObservability?.actualTotalTokens ?? latestObservability?.estimatedTotalTokens;\n' +
+    '  const tokenLabel = latestTokens === undefined\n' +
+    '    ? null\n' +
+    "    : `${latestTokens.toLocaleString()}${latestObservability?.tokenCountSource === 'estimate' ? ' est.' : ''}`;\n" +
+    "  const activePhase = phases?.find((phase) => phase.status === 'in_progress') || phases?.find((phase) => phase.status === 'failed') || phases?.find((phase) => phase.status === 'pending');\n" +
+    '\n' +
+    '  const emptyState = !messages.length && !isWorking ? (\n' +
+    '    <motion.div\n' +
+    '      key="welcome"\n' +
+    '      className="q-agent-welcome"\n' +
+    '      initial={{ opacity: 0, y: 20 }}\n' +
+    '      animate={{ opacity: 1, y: 0 }}\n' +
+    '      exit={{ opacity: 0, y: -20 }}\n' +
+    '      transition={{ duration: 0.4 }}\n' +
+    '    >\n' +
+    `      <motion.div className="q-agent-welcome-icon" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.2 }}><QuillixMark size={28} /></motion.div>\n` +
+    '      <motion.span className="q-atlas-agent-kicker" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>A SECOND MIND. IN YOUR CORNER.</motion.span>\n' +
+    "      <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>Big thought?<br /><em>Let's work it out.</em></motion.h2>\n" +
+    "      <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>Give me a little direction. We'll turn it into a clear next step.</motion.p>\n" +
+    '      <motion.div className="q-agent-suggestions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>\n' +
+    '        {[\n' +
+    "          { label: 'Understand this project', prompt: 'Explain the architecture and main entry points of this project.', mode: 'ask' as AgentMode, icon: Code2 },\n" +
+    "          { label: 'Debug an issue', prompt: 'Help me investigate a bug in this project. Here are the details: ', mode: 'debug' as AgentMode, icon: Bug },\n" +
+    "          { label: 'Run project checks', prompt: 'Run the configured project tests and build. Investigate and repair any failures.', mode: 'agent' as AgentMode, icon: TestTube2 },\n" +
+    '        ].map((item, index) => (\n' +
+    '          <motion.button\n' +
+    '            key={item.label}\n' +
+    '            onClick={() => { onModeChange(item.mode); onInputChange(item.prompt); }}\n' +
+    '            initial={{ scale: 0.9, opacity: 0 }}\n' +
+    '            animate={{ scale: 1, opacity: 1 }}\n' +
+    '            transitio'... 372885 more characters,
+  expected: /<MotionConfig reducedMotion="user">/,
+  operator: 'match',
+  diff: 'simple'
+}
+
+Node.js v22.23.2

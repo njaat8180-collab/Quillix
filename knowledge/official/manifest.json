@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "purpose": "Curated offline coding guidance for NUVRO AI retrieval. This is reference material, not model training data.",
+  "documents": [
+    {
+      "file": "mdn-javascript-guide.md",
+      "title": "MDN JavaScript Guide",
+      "source": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
+      "license": "MDN content: CC-BY-SA 2.5; code examples: MIT where marked",
+      "tags": ["javascript", "js", "web", "browser", "html", "css", "frontend", "dom", "api"]
+    },
+    {
+      "file": "typescript-everyday-types.md",
+      "title": "TypeScript Handbook: Everyday Types",
+      "source": "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html",
+      "license": "See the TypeScript-Website repository license and attribution",
+      "tags": ["typescript", "ts", "type", "types", "interface", "generic", "javascript"]
+    },
+    {
+      "file": "react-describing-the-ui.md",
+      "title": "React: Describing the UI",
+      "source": "https://react.dev/learn/describing-the-ui",
+      "license": "See the React documentation repository license and attribution",
+      "tags": ["react", "jsx", "tsx", "component", "hooks", "frontend", "ui"]
+    },
+    {
+      "file": "owasp-input-validation.md",
+      "title": "OWASP Input Validation Cheat Sheet",
+      "source": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+      "license": "CC-BY-SA 4.0",
+      "tags": ["security", "secure", "validation", "input", "api", "backend", "owasp", "auth"]
+    },
+    {
+      "file": "node-fs.md",
+      "title": "Node.js File System API",
+      "source": "https://nodejs.org/api/fs.html",
+      "license": "Node.js documentation license; see the nodejs/node repository",
+      "tags": ["node", "nodejs", "javascript", "filesystem", "fs", "server", "backend", "async"]
+    },
+    {
+      "file": "python-control-flow.rst",
+      "title": "Python Tutorial: Control Flow",
+      "source": "https://docs.python.org/3/tutorial/controlflow.html",
+      "license": "Python documentation license; see python.org",
+      "tags": ["python", "control", "flow", "function", "class", "loop", "backend"]
+    },
+    {
+      "file": "git-tutorial.html",
+      "title": "Git Tutorial",
+      "source": "https://git-scm.com/docs/gittutorial",
+      "license": "Git documentation license; see the git/git repository",
+      "tags": ["git", "branch", "commit", "diff", "merge", "repository", "version", "control"]
+    },
+    {
+      "file": "pytest-getting-started.rst",
+      "title": "pytest Getting Started",
+      "source": "https://docs.pytest.org/en/stable/getting-started.html",
+      "license": "pytest documentation license; see the pytest-dev/pytest repository",
+      "tags": ["pytest", "python", "test", "testing", "assert", "fixture", "quality"]
+    },
+    {
+      "file": "docker-getting-started.html",
+      "title": "Docker Getting Started",
+      "source": "https://docs.docker.com/get-started/",
+      "license": "Docker documentation license; see the docker/docs repository",
+      "tags": ["docker", "container", "containers", "image", "compose", "deployment", "devops"]
+    }
+  ]
+}
