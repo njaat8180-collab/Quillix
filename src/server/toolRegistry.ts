@@ -79,8 +79,59 @@ const REQUIRED_ARGS: Record<string, string[]> = {
   move_file: ['sourcePath', 'destinationPath'],
   create_directory: ['dirPath'],
   list_directory: [],
-  apply_patch: ['filePath'],
+  apply_patch: ['filePath', 'newContent'],
+  create_patch: ['filePath', 'newContent'],
+  preview_patch: ['filePath', 'newContent'],
+  detect_language: ['filePath'],
 };
+
+/**
+ * Extension → language mapping used by detect_language. Extension checks run
+ * first; content heuristics (shebangs, modelines) only refine the answer so a
+ * mislabeled file still reports something truthful instead of "unknown".
+ */
+const EXTENSION_LANGUAGES: Record<string, string> = {
+  '.js': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript', '.jsx': 'JavaScript (JSX)',
+  '.ts': 'TypeScript', '.tsx': 'TypeScript (TSX)', '.mts': 'TypeScript', '.cts': 'TypeScript',
+  '.py': 'Python', '.pyw': 'Python',
+  '.go': 'Go', '.rs': 'Rust', '.java': 'Java', '.kt': 'Kotlin', '.kts': 'Kotlin',
+  '.cs': 'C#', '.cpp': 'C++', '.cc': 'C++', '.cxx': 'C++', '.c': 'C', '.h': 'C/C++ header', '.hpp': 'C++ header',
+  '.php': 'PHP', '.rb': 'Ruby', '.swift': 'Swift', '.scala': 'Scala', '.dart': 'Dart',
+  '.html': 'HTML', '.htm': 'HTML', '.css': 'CSS', '.scss': 'SCSS', '.sass': 'Sass', '.less': 'LESS',
+  '.vue': 'Vue', '.svelte': 'Svelte', '.json': 'JSON', '.jsonc': 'JSON with comments',
+  '.yaml': 'YAML', '.yml': 'YAML', '.toml': 'TOML', '.ini': 'INI', '.xml': 'XML',
+  '.md': 'Markdown', '.markdown': 'Markdown', '.txt': 'Plain text',
+  '.sh': 'Shell', '.bash': 'Shell', '.zsh': 'Shell', '.ps1': 'PowerShell', '.psm1': 'PowerShell', '.bat': 'Batch', '.cmd': 'Batch',
+  '.sql': 'SQL', '.graphql': 'GraphQL', '.gql': 'GraphQL', '.proto': 'Protocol Buffers',
+  '.lua': 'Lua', '.pl': 'Perl', '.r': 'R', '.ex': 'Elixir', '.exs': 'Elixir', '.erl': 'Erlang',
+  '.hs': 'Haskell', '.clj': 'Clojure', '.dockerfile': 'Dockerfile',
+};
+
+/** Detect the language of one file from its extension, then refine by content. */
+function detectFileLanguage(filePath: string, content: string | undefined): string {
+  const base = path.basename(filePath).toLowerCase();
+  const extension = path.extname(base);
+  let language = EXTENSION_LANGUAGES[extension] || (base === 'dockerfile' ? 'Dockerfile' : base === 'makefile' ? 'Makefile' : '');
+  if (content) {
+    const head = content.slice(0, 256);
+    const shebang = /^#!([^\r\n]*)/.exec(head);
+    if (shebang) {
+      // Consider every token: "#!/usr/bin/env python3" hides the real
+      // interpreter in the second token.
+      const tokens = shebang[1].trim().split(/\s+/).filter(Boolean);
+      const interpreters = tokens.map(token => path.basename(token));
+      if (interpreters.some(name => /python/.test(name))) language = 'Python';
+      else if (interpreters.some(name => /node|deno|bun/.test(name))) language = 'JavaScript';
+      else if (interpreters.some(name => /^(?:ba|z|fi|a)?sh$/.test(name) || /bash|zsh|dash/.test(name))) language = 'Shell';
+    }
+    if (!language) {
+      if (/^\s*[{[]/.test(content) && /"\w+"\s*:/.test(content.slice(0, 4096))) language = 'JSON';
+      else if (/^\s*<\?xml/.test(content)) language = 'XML';
+      else if (/<html|<!doctype/i.test(head)) language = 'HTML';
+    }
+  }
+  return language || 'Unknown';
+}
 
 function validateRequiredArgs(name: string, args: Record<string, any>): string | null {
   const required = REQUIRED_ARGS[name];
@@ -126,6 +177,72 @@ function normalizeModelFileContent(name: string, args: Record<string, any> | nul
   return changed;
 }
 
+/**
+ * Whitespace-tolerant match used as the last-chance fallback for edit_file.
+ *
+ * Small coding models quote `oldString` excerpts with the right tokens but the
+ * wrong whitespace: wrong indentation, tabs instead of spaces, trailing
+ * spaces, or CRLF/LF drift. Before failing the edit, locate every candidate
+ * whose only difference is whitespace and map it back to exact source offsets,
+ * so the tool can apply the intended change against the real file text.
+ *
+ * Returns ranges in ORIGINAL content coordinates. Empty when no candidate
+ * exists (the caller then reports a genuine "oldString not found" failure).
+ */
+export function findWhitespaceTolerantMatches(
+  content: string,
+  needle: string,
+  maxScanBytes = 4 * 1024 * 1024,
+): Array<{ start: number; end: number }> {
+  if (!content || !needle || !needle.trim()) return [];
+  if (Buffer.byteLength(content, 'utf8') > maxScanBytes) return [];
+
+  // Canonical form: every run of whitespace becomes one space, and both sides
+  // are compared with their outer whitespace removed.
+  const canonical = (value: string): string => value.replace(/\s+/g, ' ').trim();
+  const target = canonical(needle);
+  if (!target) return [];
+
+  // Build the canonical content with an index map back to original offsets.
+  let normalized = '';
+  const startAt: number[] = [];
+  const endAt: number[] = [];
+  let pendingWhitespace = false;
+  for (let index = 0; index < content.length; index++) {
+    const char = content[index];
+    if (/\s/.test(char)) {
+      pendingWhitespace = true;
+      continue;
+    }
+    if (pendingWhitespace && normalized.length > 0) {
+      normalized += ' ';
+      startAt.push(index);
+      endAt.push(index);
+    }
+    pendingWhitespace = false;
+    normalized += char;
+    startAt.push(index);
+    endAt.push(index + 1);
+  }
+
+  const matches: Array<{ start: number; end: number }> = [];
+  /** Include a line's own indentation when the quote starts a line bare. */
+  const extendOverLineIndent = (start: number): number => {
+    let index = start - 1;
+    while (index >= 0 && (content[index] === ' ' || content[index] === '\t')) index--;
+    return index < 0 || content[index] === '\n' || content[index] === '\r' ? index + 1 : start;
+  };
+  let from = 0;
+  for (;;) {
+    const hit = normalized.indexOf(target, from);
+    if (hit < 0) break;
+    const last = hit + target.length - 1;
+    matches.push({ start: extendOverLineIndent(startAt[hit]), end: endAt[last] });
+    from = hit + 1;
+    if (matches.length > 16) break; // bounded: ambiguity is the caller's call
+  }
+  return matches;
+}
 /**
  * Applies the run's project prefix to relative path arguments so every file
  * operation lands inside the active project folder even when the model
@@ -356,7 +473,7 @@ export class ToolRegistry {
       {
         name: 'edit_file',
         category: 'file',
-        description: 'Safely replace a unique exact oldString with newString in an existing file. Ambiguous matches require more context or explicit replaceAll. Rejects syntax-breaking JS/TS/JSON edits to valid source.',
+        description: 'Safely replace a unique exact oldString with newString in an existing file. Ambiguous matches require more context or explicit replaceAll. Rejects syntax-breaking JS/TS/JSON edits to valid source. If oldString differs from the file only in whitespace (indentation/tabs/trailing spaces), a unique whitespace-insensitive match is applied instead of failing.',
         permission: 'write',
         parameters: {
           type: 'object',
@@ -1285,20 +1402,40 @@ export class ToolRegistry {
             };
           }
           const content = readRes.content;
-          if (!content.includes(oldString)) {
-            return {
-              toolCallId,
-              toolName: name,
-              success: false,
-              output: `edit_file failed: oldString was not found in ${args.filePath}. Read the file first and use an exact excerpt as oldString.`,
-              error: 'oldString not found in file',
-            };
-          }
-          const occurrences = content.split(oldString).length - 1;
-          if (occurrences > 1 && args.replaceAll !== true) {
+          const tolerantMatches = content.includes(oldString) ? [] : findWhitespaceTolerantMatches(content, oldString);
+          let occurrences = content.split(oldString).length - 1;
+          let updated: string;
+          let whitespaceNormalized = false;
+          if (occurrences === 0) {
+            // Last-chance recovery: the quote is probably the right code with
+            // the wrong whitespace (indentation, tabs/spaces, trailing spaces,
+            // CRLF). Only a UNIQUE whitespace-tolerant match is applied, and
+            // the model is told the match was normalized.
+            if (tolerantMatches.length === 1) {
+              const { start, end } = tolerantMatches[0];
+              occurrences = 1;
+              whitespaceNormalized = true;
+              updated = content.slice(0, start) + newString + content.slice(end);
+            } else if (tolerantMatches.length > 1) {
+              return {
+                toolCallId, toolName: name, success: false,
+                output: `Ambiguous edit: oldString matches ${tolerantMatches.length} places in ${args.filePath} when whitespace differences are ignored. Re-read the file and quote one exact, unique excerpt (or set replaceAll: true when every match is intended). No file was changed.`,
+                error: 'Ambiguous oldString; exact unique context required',
+              };
+            } else {
+              return {
+                toolCallId,
+                toolName: name,
+                success: false,
+                output: `edit_file failed: oldString was not found in ${args.filePath} (a whitespace-insensitive retry also found no match). Read the file first and use an exact excerpt as oldString.`,
+                error: 'oldString not found in file',
+              };
+            }
+          } else if (occurrences > 1 && args.replaceAll !== true) {
             return { toolCallId, toolName: name, success: false, output: `Ambiguous edit: oldString matches ${occurrences} places in ${args.filePath}. Include unique surrounding context, or explicitly set replaceAll: true when every replacement is intended. No file was changed.`, error: 'Ambiguous oldString; exact unique context required' };
+          } else {
+            updated = occurrences === 1 ? content.replace(oldString, newString) : content.split(oldString).join(newString);
           }
-          const updated = occurrences === 1 ? content.replace(oldString, newString) : content.split(oldString).join(newString);
           if (updated === content) return { toolCallId, toolName: name, success: false, output: 'The proposed edit makes no source change. Reinspect the file and provide an actual correction, or report that no change is needed.', error: 'No source change' };
           const extension = path.extname(args.filePath).toLowerCase();
           if (content.length <= 512 * 1024 && updated.length <= 512 * 1024 && /^(?:\.[cm]?js|\.jsx|\.ts|\.tsx|\.json)$/.test(extension)) {
@@ -1334,7 +1471,7 @@ export class ToolRegistry {
             toolCallId,
             toolName: name,
             success: true,
-            output: `Edited ${args.filePath}: replaced ${occurrences} occurrence(s) of the target text — read back from disk and verified: ${res.sizeBytes} bytes on disk.`,
+            output: `Edited ${args.filePath}: replaced ${occurrences} occurrence(s) of the target text — read back from disk and verified: ${res.sizeBytes} bytes on disk.${whitespaceNormalized ? ' NOTE: your oldString differed from the file only in whitespace (indentation/spacing), so it was matched whitespace-insensitively. Use verify_file or read_file to confirm the applied change is what you intended.' : ''}`,
             data: patch,
           };
         }
@@ -1500,7 +1637,10 @@ export class ToolRegistry {
         }
 
         case 'get_project_structure': {
-          const depth = typeof args.maxDepth === 'number' && args.maxDepth > 0 ? Math.floor(args.maxDepth) : 6;
+          // Bound the traversal depth (and reject junk values) so a hostile or
+          // confused model cannot request an unbounded deep walk of a large tree.
+          const requestedDepth = typeof args.maxDepth === 'number' && Number.isFinite(args.maxDepth) ? Math.floor(args.maxDepth) : 6;
+          const depth = Math.min(12, Math.max(1, requestedDepth));
           const res = this.workspace.getProjectStructure(args.dirPath || '.', depth);
           if (!res.success || !res.tree) {
             return { toolCallId, toolName: name, success: false, output: res.error || 'Failed to read project structure', error: res.error };
@@ -1693,9 +1833,38 @@ export class ToolRegistry {
           return { toolCallId, toolName: name, success: true, output: `Project Type: ${meta.framework} / ${meta.runtime}` };
         }
 
+        case 'detect_language': {
+          const read = this.workspace.readFile(args.filePath);
+          const content = read.success && read.content !== undefined ? read.content.slice(0, 64 * 1024) : undefined;
+          if (!read.success && read.error) {
+            // The path exists per the resolver, but the bytes are unavailable:
+            // report the extension-based answer and surface the read problem
+            // instead of failing the whole detection.
+            const fromExtension = detectFileLanguage(args.filePath, undefined);
+            return {
+              toolCallId,
+              toolName: name,
+              success: true,
+              output: `Language: ${fromExtension} (extension-based; the file could not be read: ${read.error})`,
+              data: { filePath: args.filePath, language: fromExtension, readError: read.error },
+            };
+          }
+          const language = detectFileLanguage(args.filePath, content);
+          return {
+            toolCallId,
+            toolName: name,
+            success: true,
+            output: `Language: ${language}\nFile: ${args.filePath}`,
+            data: { filePath: args.filePath, language },
+          };
+        }
+
         // --- PATCH TOOLS ---
         case 'create_patch':
         case 'preview_patch': {
+          if (typeof args.newContent !== 'string') {
+            return { toolCallId, toolName: name, success: false, output: `Invalid tool arguments: '${name}' requires a non-empty string argument 'newContent' with the complete proposed file content.`, error: 'Missing newContent' };
+          }
           const read = this.workspace.readFile(args.filePath);
           const oldContent = read.success && read.content !== undefined ? read.content : '';
           const patch = PatchEngine.createPatch(args.filePath, oldContent, args.newContent, read.success ? 'modified' : 'created');
@@ -2028,7 +2197,9 @@ export class ToolRegistry {
         }
 
         case 'git_log': {
-          const log = await this.git.getLog(root, args.limit || 10);
+          const requestedLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : 10;
+          const limit = Math.min(500, Math.max(1, requestedLimit));
+          const log = await this.git.getLog(root, limit);
           const formatted = log.map((l) => `${l.hash} - ${l.message} (${l.author}, ${l.date})`).join('\n');
           return {
             toolCallId,
