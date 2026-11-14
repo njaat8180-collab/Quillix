@@ -41,6 +41,7 @@
     "test:electron-browser": "electron scripts/smoke/electron-browser-e2e.cjs",
     "lint": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "icon:build": "node scripts/build/generate-icon.mjs",
     "build:electron": "npm run build",
     "package:win": "node scripts/smoke/package-win.mjs",
     "test:agent-e2e": "node scripts/e2e/run-agent-e2e.mjs",

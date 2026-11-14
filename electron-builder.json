@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.nuvro.ai.coding.agent",
-  "productName": "NUVRO AI",
+  "appId": "com.quillix.coding.agent",
+  "productName": "Quillix",
   "directories": {
     "output": "release/windows",
     "buildResources": "build"
@@ -38,7 +38,7 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "NUVRO AI"
+    "shortcutName": "Quillix"
   },
   "asar": true
 }

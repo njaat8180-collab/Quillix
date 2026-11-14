@@ -118,7 +118,11 @@ say "== Starting the real Quillix server on 127.0.0.1:$PORT =="
 # --require fetch-polyfill (absolute path): pure node:http fetch for environments where
 # Node's undici cannot allocate its llhttp WASM. The Quillix code path and
 # the wire protocol are unchanged.
+# QUILLIX_MAX_CPU_PERCENT: this harness talks to an in-process mock provider that
+# answers instantly, so host CPU contention must not starve the agent. Production
+# keeps the default 90% ceiling (src/server/resourceGuard.ts).
 NODE_ENV=production PORT="$PORT" QUILLIX_SETTINGS_PATH="$SETTINGS_NATIVE" \
+  QUILLIX_MAX_CPU_PERCENT=100 \
   node --require "$REPO_ROOT/scripts/e2e/fetch-polyfill.cjs" "$SERVER_BUNDLE" \
   > "$WORK_DIR/server.log" 2>&1 &
 SERVER_PID=$!
