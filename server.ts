@@ -56,7 +56,16 @@ import { BUILTIN_CODING_PLUGINS } from './src/server/builtinPlugins.js';
 import { SourceContextRetriever } from './src/server/sourceContext.js';
 import { buildInlineCompletionPrompt, cleanInlineCompletion, trimCompletionContext } from './src/shared/inlineCompletion.js';
 import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey } from './src/server/tavilyVerification.js';
-import { installFaultReporter } from './src/server/faultReporter.js';
+import { createLocalApiGuard, createApiErrorHandler, isLoopbackAddress } from './platform/httpSecurity.js';
+import { resolvePort } from './platform/portConfig.js';
+import { buildContentSecurityPolicy } from './platform/csp.js';
+import {
+  acquireWorkspaceLease,
+  renewWorkspaceLease,
+  releaseWorkspaceLease,
+  readWorkspaceLease,
+  DEFAULT_LEASE_TTL_MS,
+} from './platform/workspaceLease.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -77,12 +86,6 @@ const pendingApprovals = new Map<
   { resolve: (approved: boolean) => void; request: { kind: 'terminal' | 'git' | 'file'; title: string; command?: string; reason?: string } }
 >();
 
-function isLoopbackAddress(remoteAddress: string | undefined): boolean {
-  if (!remoteAddress) return false;
-  const normalized = remoteAddress.replace(/^::ffff:/, '').toLowerCase();
-  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
-}
-
 /** Keep long model generations alive through Electron/browser/proxy idle timers. */
 function startSseKeepAlive(res: Response): () => void {
   res.setHeader('X-Accel-Buffering', 'no');
@@ -95,29 +98,6 @@ function startSseKeepAlive(res: Response): () => void {
   return () => clearInterval(timer);
 }
 
-/**
- * Cleanup hook invoked by the fault reporter before a fatal exit.
- *
- * Registered by `startServer()` once the runtime resources exist. An
- * uncaught exception leaves the process in an undefined state, so the server
- * must stop serving, abort any in-flight agent task and release child
- * processes *before* it dies — otherwise a half-applied patch or a
- * half-written file could be left behind.
- */
-let fatalCleanup: (() => void | Promise<void>) | null = null;
-
-// Report process-level faults.
-//   - Unhandled rejection → report and keep serving (state is still defined).
-//   - Uncaught exception  → report, clean up, then exit (state is NOT
-//     defined, so continuing to serve risks silent data corruption).
-installFaultReporter({
-  label: '[quillix] [server]',
-  log: (message, error) => console.error(message, error ?? ''),
-  onFatalError: () => fatalCleanup?.(),
-  fatalCleanupTimeoutMs: 3000,
-  fatalExitCode: 1,
-});
-
 async function startServer() {
   const app = express();
   let agentBusy = false;
@@ -128,8 +108,21 @@ async function startServer() {
   // NUVRO AI's control API is localhost-only by default. Never bind 0.0.0.0 —
   // this API can read/write files, run terminal commands, and execute tools.
   const HOST = '127.0.0.1';
-  const PORT = Number(process.env.PORT || 3000);
-  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+  // One port contract for the desktop shell and this server: an explicitly
+  // configured but invalid PORT is rejected with an actionable message instead
+  // of being coerced into a different port.
+  const portResolution = resolvePort({ envPort: process.env.PORT });
+  if (!portResolution.ok) {
+    throw new Error(portResolution.reason ?? 'PORT must be an integer between 1 and 65535.');
+  }
+  const PORT = portResolution.port;
+
+  // --- SECURITY MIDDLEWARE -------------------------------------------------
+  // 1) The NUVRO AI API must only be reachable from the local machine.
+  //    This runs BEFORE the body parser on purpose: a hostile page in the
+  //    user's browser must not be able to make the server allocate a 50 MB
+  //    JSON body just to be rejected afterwards.
+  app.use('/api', createLocalApiGuard(PORT));
 
   app.use(express.json({ limit: '50mb' }));
   const requireAgentMode = (req: Request, res: Response, next: NextFunction) => {
@@ -144,19 +137,6 @@ async function startServer() {
   };
   app.use(['/api/workspace/set-root', '/api/workspace/create-project', '/api/project/open', '/api/settings', '/api/providers/sarvam/key', '/api/providers/sarvam/failover-key', '/api/providers/sarvam/failover-keys', '/api/providers/openai/key', '/api/providers/openai/failover-key', '/api/providers/openai/failover-keys', '/api/providers/grok/key', '/api/providers/grok/failover-key', '/api/providers/grok/failover-keys', '/api/providers/groq/key', '/api/providers/groq/failover-key', '/api/providers/groq/failover-keys', '/api/providers/nvidia/key', '/api/providers/nvidia/failover-key', '/api/providers/nvidia/failover-keys', '/api/providers/universal/key', '/api/providers/tavily/key'], (req, res, next) => {
     if (agentBusy && req.method !== 'GET') return res.status(409).json({ success: false, error: 'Wait for the active task to finish or stop it before changing the workspace or settings.' });
-    next();
-  });
-
-  // --- SECURITY MIDDLEWARE -------------------------------------------------
-  // 1) The NUVRO AI API must only be reachable from the local machine.
-  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
-    if (!isLoopbackAddress(req.socket.remoteAddress) ||
-        !validateLocalApiRequest(req.headers.host, req.headers.origin, PORT)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Forbidden: NUVRO AI only accepts requests from its local application origin.',
-      });
-    }
     next();
   });
 
@@ -178,6 +158,51 @@ async function startServer() {
       ? initialSettings.workspaceRoot
       : process.cwd();
   const workspaceManager = new WorkspaceManager(initialWorkspaceRoot);
+  // M9.6: concurrent workspace safety. Only one NUVRO AI instance may write
+  // to a workspace at a time. The lease lives in the workspace's own
+  // `.quillix/` folder (already git-ignored) and is arbitrated by an
+  // exclusive file create, so two racing processes cannot both win it.
+  const workspaceLeaseOwnerId = `quillix-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+  let workspaceLeaseRoot = workspaceManager.getRoot();
+  let workspaceLeaseHeld = false;
+  const acquireWorkspaceLeaseFor = (root: string): { ok: boolean; error?: string } => {
+    const result = acquireWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
+    if (!result.acquired) return { ok: false, error: result.error };
+    workspaceLeaseRoot = root;
+    workspaceLeaseHeld = true;
+    return { ok: true };
+  };
+  const releaseWorkspaceLeaseFor = (root: string) => {
+    if (!workspaceLeaseHeld) return;
+    releaseWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
+    workspaceLeaseHeld = false;
+  };
+  // Take the lease before the server accepts a single request. A second
+  // instance on the same workspace fails fast with an actionable message
+  // instead of corrupting the user's files.
+  {
+    const startupLease = acquireWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
+    if (!startupLease.acquired) {
+      console.error(
+        `\nQuillix could not start: ${startupLease.error || 'the workspace is already in use.'}\n` +
+          `Two instances writing to the same folder would overwrite each other's work.\n` +
+          `Stop the other instance, or start this one with a different workspace folder.\n`
+      );
+      process.exit(1);
+    }
+    workspaceLeaseHeld = true;
+  }
+  // Renew the lease while the server is alive. If the lease was taken over
+  // (this instance was frozen long enough for it to expire), say so loudly.
+  const workspaceLeaseHeartbeat = setInterval(() => {
+    if (!workspaceLeaseHeld) return;
+    const renewed = renewWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
+    if (!renewed.acquired) {
+      console.error(`Quillix workspace lease lost: ${renewed.error || 'another instance took the workspace.'}`);
+    }
+  }, Math.max(5_000, Math.floor(DEFAULT_LEASE_TTL_MS / 3)));
+  workspaceLeaseHeartbeat.unref?.();
+
   const terminalService = new TerminalService();
   const gitService = new GitService(terminalService);
   // One agent task = one git branch (Cursor-style). Remembers the base branch
@@ -964,6 +989,14 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   app.post('/api/workspace/set-root', async (req: Request, res: Response) => {
     const { targetPath } = req.body;
     if (!targetPath) return res.status(400).json({ success: false, error: 'targetPath required' });
+    // M9.6: take the lease for the target folder BEFORE switching. If another
+    // instance already owns it, refuse the switch instead of leaving two
+    // instances writing to the same folder.
+    const previousRoot = workspaceLeaseRoot;
+    const lease = acquireWorkspaceLeaseFor(targetPath);
+    if (!lease.ok) {
+      return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
+    }
     const result = workspaceManager.setRoot(targetPath);
     // Persist the selected workspace so it is restored on the next start.
     if (result.success) {
@@ -972,8 +1005,26 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
+      // The old workspace is no longer ours.
+      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
+    } else {
+      // The switch failed: give the target folder back.
+      releaseWorkspaceLeaseFor(targetPath);
+      workspaceLeaseHeld = workspaceLeaseRoot === previousRoot;
     }
     res.json(result);
+  });
+
+  // Workspace - lease status (M9.6). Lets the UI show who owns the folder.
+  app.get('/api/workspace/lease', (_req: Request, res: Response) => {
+    const lease = readWorkspaceLease(workspaceLeaseRoot);
+    res.json({
+      success: true,
+      ownerId: workspaceLeaseOwnerId,
+      root: workspaceLeaseRoot,
+      held: workspaceLeaseHeld && lease?.ownerId === workspaceLeaseOwnerId,
+      lease: lease ? { ownerId: lease.ownerId, ownerPid: lease.ownerPid, ownerHost: lease.ownerHost, acquiredAt: lease.acquiredAt, heartbeatAt: lease.heartbeatAt, expiresAt: lease.expiresAt } : null,
+    });
   });
 
   // ---- TASKS (§21 — persistent task memory / resume) -----------------------
@@ -1073,8 +1124,16 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
         return res.status(409).json({ success: false, error: `Folder already exists: ${projectDir}` });
       }
       fs.mkdirSync(projectDir, { recursive: true });
+      // M9.6: the freshly created folder is ours to take, but the lease is
+      // still acquired explicitly so the invariant holds on every path.
+      const previousRoot = workspaceLeaseRoot;
+      const lease = acquireWorkspaceLeaseFor(projectDir);
+      if (!lease.ok) {
+        return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
+      }
       const result = workspaceManager.setRoot(projectDir);
       if (!result.success) {
+        releaseWorkspaceLeaseFor(projectDir);
         return res.status(500).json({ success: false, error: result.error });
       }
       await toolRegistry.setWorkspaceRoot(result.path);
@@ -1082,6 +1141,7 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
+      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
       res.json({ success: true, path: result.path });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -1439,6 +1499,9 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   };
 
   previewApp.use('/preview', (req: Request, res: Response) => servePreviewAsset(req, res, true));
+  // The preview server serves untrusted user projects: never leak a stack
+  // trace or an absolute path into the preview document.
+  previewApp.use(createApiErrorHandler());
   const previewServer = previewApp.listen(0, HOST, () => {
     const address = previewServer.address() as import('net').AddressInfo;
     previewServerReady = true;
@@ -2091,7 +2154,26 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   });
 
   // Vite middleware setup
-  if (process.env.NODE_ENV !== 'production') {
+  // An unknown /api path must be a JSON 404, never the single-page app:
+  // returning HTML with status 200 makes a failed API call look successful.
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ success: false, error: 'Unknown API endpoint.' });
+  });
+
+  // The renderer is a local single-page app: it only ever loads its own
+  // origin. The CSP is sent as a header as well as a meta tag so directives
+  // that only work in headers (frame-ancestors) are enforced too.
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  const appContentSecurityPolicy = `${buildContentSecurityPolicy(isDevelopment ? 'development' : 'production')}; frame-ancestors 'none'`;
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Content-Security-Policy', appContentSecurityPolicy);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
+
+  if (isDevelopment) {
     app.use('/monaco/vs', express.static(path.resolve('node_modules/monaco-editor/min/vs')));
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -2106,6 +2188,10 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Terminal error handler: no stack trace and no absolute path ever reaches
+  // the browser. Express' default handler leaks both outside production mode.
+  app.use(createApiErrorHandler());
 
   const server = app.listen(PORT, HOST, () => {
     console.log(`NUVRO AI Server running on http://${HOST}:${PORT} (localhost only)`);
@@ -2156,47 +2242,15 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
     previewServerReady = false;
     previewSessionService.stopAll();
     previewServer.close();
+    // M9.6: hand the workspace back so another instance can start cleanly.
+    clearInterval(workspaceLeaseHeartbeat);
+    releaseWorkspaceLeaseFor(workspaceLeaseRoot);
     server.close(() => process.exit(0));
     // Safety net if close hangs on open keep-alive connections.
     setTimeout(() => process.exit(0), 2000).unref();
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-  // Fatal cleanup for an uncaught exception. The fault reporter will exit the
-  // process once this returns; this hook only releases resources and stops
-  // serving so that a half-written file or a half-applied patch is not left
-  // behind by an inconsistent process state.
-  fatalCleanup = () => {
-    console.error('\nQuillix server is shutting down after an uncaught exception...');
-    // Abort any in-flight agent run so no half-applied patch is written.
-    try {
-      activeAgentController?.abort();
-    } catch {
-      // best effort
-    }
-    try {
-      terminalService.killAll();
-      projectRunService.stopAll();
-      toolRegistry.extensions.closeAll();
-    } catch {
-      // best effort
-    }
-    try {
-      previewServerReady = false;
-      previewSessionService.stopAll();
-      previewServer.close();
-    } catch {
-      // best effort
-    }
-    // Stop accepting new requests. In-flight requests are not waited for,
-    // because the process state is undefined; the exit is imminent.
-    try {
-      server.close();
-    } catch {
-      // best effort
-    }
-  };
 
   // Orphan watchdog: when launched by the Electron desktop app, exit if the
   // parent process dies so no NUVRO AI server is left running after a crash

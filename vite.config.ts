@@ -2,13 +2,30 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'node:fs';
-import {defineConfig} from 'vite';
+import {defineConfig, type Plugin} from 'vite';
+import { buildContentSecurityPolicy, injectContentSecurityPolicy } from './platform/csp.js';
+
+/**
+ * Inject the renderer Content Security Policy into index.html.
+ * The production bundle has no inline scripts; the development server needs
+ * the Vite React Fast Refresh preamble and the HMR websocket, so the policy
+ * is mode aware.
+ */
+function contentSecurityPolicyPlugin(): Plugin {
+  return {
+    name: 'nuvro-content-security-policy',
+    transformIndexHtml(html, ctx) {
+      const mode = ctx.server ? 'development' : 'production';
+      return injectContentSecurityPolicy(html, buildContentSecurityPolicy(mode));
+    },
+  };
+}
 
 export default defineConfig(() => {
   return {
     // Relative base so the built app also works when loaded via file:// in Electron.
     base: './',
-    plugins: [react(), tailwindcss(), {
+    plugins: [react(), tailwindcss(), contentSecurityPolicyPlugin(), {
       name: 'local-monaco',
       closeBundle() {
         fs.cpSync(path.resolve('node_modules/monaco-editor/min/vs'), path.resolve('dist/monaco/vs'), { recursive: true });

@@ -610,7 +610,7 @@ export default function App() {
               const errorMessage: ChatMessage = {
                 id: `msg_err_${Date.now()}`,
                 role: 'assistant',
-                content: `âŒ ${data.error || 'The agent run failed.'}`,
+                content: `❌ ${data.error || 'The agent run failed.'}`,
                 timestamp: Date.now(),
                 patches: accumulatedPatches,
                 activityLog: localActivities,
@@ -628,7 +628,7 @@ export default function App() {
         const interruptedMessage: ChatMessage = {
           id: `msg_${cancelled ? 'cancel' : 'err'}_${Date.now()}`,
           role: 'assistant',
-          content: cancelled ? 'Cancelled.' : `âŒ ${err.message || 'Failed to run the agent.'}`,
+          content: cancelled ? 'Cancelled.' : `❌ ${err.message || 'Failed to run the agent.'}`,
           timestamp: Date.now(),
           patches: accumulatedPatches,
           activityLog: localActivities,
@@ -692,7 +692,7 @@ export default function App() {
       refreshProjectMeta();
       refreshWorkspaceState();
     } catch (error: any) {
-      setMessages((prev) => [...prev, { id: `msg_rollback_error_${Date.now()}`, role: 'assistant', content: `âŒ Rollback failed: ${error?.message || 'request failed.'}`, timestamp: Date.now() }]);
+      setMessages((prev) => [...prev, { id: `msg_rollback_error_${Date.now()}`, role: 'assistant', content: `❌ Rollback failed: ${error?.message || 'request failed.'}`, timestamp: Date.now() }]);
     }
   };
 

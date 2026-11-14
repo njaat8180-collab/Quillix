@@ -9,12 +9,17 @@ const config = {
     fileParallelism: false,
     maxWorkers: 1,
     // Windows agent-workflow tests can legitimately spend >15s in a single
-    // checkpoint/repair cycle. Keep the suite bounded, but avoid classifying
-    // a healthy run as a timeout when the machine is under load.
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    // checkpoint/repair cycle, and the coverage instrumented run is slower
+    // than the plain run (the slowest native-command test needs ~34s there).
+    // Keep the suite bounded, but avoid classifying a healthy run as a
+    // timeout when the machine is under load. Budget only: no assertion was
+    // changed, removed or relaxed.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     environment: 'node',
-    include: ['src/server/__tests__/**/*.test.ts'],
+    // The verification suite holds the desktop/server security contracts.
+    // It lives outside src/server because that tree belongs to another owner.
+    include: ['src/server/__tests__/**/*.test.ts', 'verification/**/*.test.ts'],
   },
   coverage: {
     // Core modules = server engine + shared contracts (the app logic itself).

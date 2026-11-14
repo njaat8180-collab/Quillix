@@ -5,6 +5,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
+// Budget for a `node tsx` child. tsx transpiles TypeScript on the fly, so on a
+// loaded host the child's startup alone can take 10-20 s; a tighter budget
+// kills it before the demo can write its report, failing the test for reasons
+// unrelated to the code under test. The assertions are unchanged.
+const TSX_CHILD_TIMEOUT_MS = 60_000;
+
 test('deterministic Tavily demo separates fixture operations from real usage', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'quillix-tavily-demo-contract-'));
   const outputPath = path.join(tempRoot, 'demo.json');
@@ -14,7 +20,7 @@ test('deterministic Tavily demo separates fixture operations from real usage', (
     const result = spawnSync(process.execPath, [tsxCli, demoScript], {
       cwd: process.cwd(),
       encoding: 'utf8',
-      timeout: 20_000,
+      timeout: TSX_CHILD_TIMEOUT_MS,
       windowsHide: true,
       env: { ...process.env, QUILLIX_DEMO_APPROVE: 'true', QUILLIX_TAVILY_DEMO_OUTPUT: outputPath },
     });

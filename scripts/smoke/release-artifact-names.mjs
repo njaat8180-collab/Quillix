@@ -1,86 +1,58 @@
-/**
- * Shared helper: resolve the real Windows artifact names for the packaged app.
- *
- * WHY THIS EXISTS
- * ---------------
- * `electron-builder.json` sets `"productName": "NUVRO AI"`, so electron-builder
- * emits:
- *   - the unpacked executable  -> `NUVRO AI.exe`
- *   - the NSIS installer       -> `NUVRO AI Setup 1.2.0.exe`
- *   - the portable executable  -> `NUVRO AI 1.2.0.exe`
- *
- * The release gates (`test:release-artifact`, `test:packaged-static`) used to
- * hardcode the old `Quillix*.exe` names. After the product rename the gates
- * failed with "Installer missing" / "unpacked Quillix executable is missing"
- * even though `package:win` had produced a perfectly valid installer.
- *
- * These helpers derive the expected names from the actual builder config so
- * the gates verify the REAL artifact instead of a stale hardcoded string.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_VERSION = '1.2.0';
+// The release gates must verify the artifact the PACKAGER actually produces.
+// electron-builder derives the installer and executable names from
+// electron-builder.json (productName and optional artifactName templates) and
+// package.json (version). A hardcoded brand string drifts out of sync with
+// that configuration and the release gate can then never pass — it reports a
+// missing installer for a file that was just built. Read the same
+// configuration the packager uses and keep the legacy names as fallbacks so an
+// artifact built before a rename still verifies.
+const DEFAULT_PRODUCT_NAME = 'Quillix';
+const DEFAULT_VERSION = '0.0.0';
 
-/** Read `productName` and `version` from the builder config + package.json. */
-export function readProductIdentity(projectRoot) {
-  let productName = 'Quillix';
-  let version = DEFAULT_VERSION;
-  try {
-    const builder = JSON.parse(fs.readFileSync(path.join(projectRoot, 'electron-builder.json'), 'utf8'));
-    if (typeof builder.productName === 'string' && builder.productName.trim()) {
-      productName = builder.productName.trim();
-    }
-  } catch { /* fall back to the default */ }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
-    if (typeof pkg.version === 'string' && pkg.version.trim()) version = pkg.version.trim();
-  } catch { /* fall back to the default */ }
-  return { productName, version };
+function readJson(root, file) {
+  try { return JSON.parse(fs.readFileSync(path.join(root, file), 'utf8')); } catch { return undefined; }
+}
+
+function expand(template, vars) {
+  return String(template).replace(/\$\{(\w+)\}/g, (match, key) => (key in vars ? vars[key] : match));
 }
 
 /**
- * Expected artifact names for a packaging target.
- * `nsis` -> "NUVRO AI Setup 1.2.0.exe", `portable` -> "NUVRO AI 1.2.0.exe".
+ * Candidate artifact names for the Windows release, most specific first.
+ * `nsis` matches the installer, `portable` the single-file executable and
+ * `executable` the unpacked app inside win-unpacked.
  */
-export function expectedArtifactNames(projectRoot, target) {
-  const { productName, version } = readProductIdentity(projectRoot);
-  return {
-    productName,
-    version,
-    unpackedExecutable: `${productName}.exe`,
-    installer: target === 'portable' ? `${productName} ${version}.exe` : `${productName} Setup ${version}.exe`,
-  };
+export function releaseArtifactNames(root = process.cwd()) {
+  const builder = readJson(root, 'electron-builder.json') || {};
+  const pkg = readJson(root, 'package.json') || {};
+  const productName = typeof builder.productName === 'string' && builder.productName.trim()
+    ? builder.productName.trim()
+    : DEFAULT_PRODUCT_NAME;
+  const version = typeof pkg.version === 'string' && pkg.version.trim() ? pkg.version.trim() : DEFAULT_VERSION;
+  const vars = { productName, version, name: productName, arch: 'x64', os: 'win', channel: 'latest' };
+
+  const winArtifactName = builder.win && builder.win.artifactName;
+  const nsisTemplate = (builder.nsis && builder.nsis.artifactName) || winArtifactName || '${productName} Setup ${version}.exe';
+  const portableTemplate = (builder.portable && builder.portable.artifactName) || winArtifactName || '${productName} ${version}.exe';
+
+  const nsis = [expand(nsisTemplate, vars), 'Quillix Setup 1.2.0.exe'];
+  const portable = [expand(portableTemplate, vars), `${productName}.exe`, 'Quillix 1.2.0.exe', 'Quillix.exe'];
+  const executable = [`${productName}.exe`, 'Quillix.exe'];
+  const unique = names => [...new Set(names.filter(Boolean))];
+  return { productName, version, nsis: unique(nsis), portable: unique(portable), executable: unique(executable) };
 }
 
 /**
- * Locate the installer in the release directory.
- *
- * Prefers the exact expected name, then accepts the legacy `Quillix*.exe`
- * spelling so an artifact produced before the rename is still verifiable.
+ * First candidate that exists on disk; otherwise the preferred (first) name,
+ * so a missing artifact is reported against the path the packager would use.
  */
-export function resolveInstaller(releaseRoot, projectRoot, target) {
-  const expected = expectedArtifactNames(projectRoot, target);
-  const candidates = target === 'portable'
-    ? [expected.installer, 'Quillix 1.2.0.exe', 'Quillix.exe']
-    : [expected.installer, 'Quillix Setup 1.2.0.exe'];
+export function firstExistingArtifact(directory, candidates) {
   for (const name of candidates) {
-    const candidate = path.join(releaseRoot, name);
-    if (fs.existsSync(candidate)) return candidate;
+    const full = path.join(directory, name);
+    if (fs.existsSync(full)) return full;
   }
-  return path.join(releaseRoot, expected.installer);
-}
-
-/**
- * Locate the unpacked executable in the release directory.
- * Prefers the expected product name, then accepts the legacy spelling.
- */
-export function resolveUnpackedExecutable(unpackedDir, projectRoot) {
-  const expected = expectedArtifactNames(projectRoot, 'nsis');
-  const candidates = [expected.unpackedExecutable, 'Quillix.exe'];
-  for (const name of candidates) {
-    const candidate = path.join(unpackedDir, name);
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return path.join(unpackedDir, expected.unpackedExecutable);
+  return path.join(directory, candidates[0]);
 }

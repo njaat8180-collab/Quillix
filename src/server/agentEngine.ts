@@ -22,7 +22,6 @@ import { isProjectContinuation } from './intentRouter.js';
 import { mapWithConcurrency, independentTargets } from '../shared/concurrency.js';
 import { ToolRegistry, ToolExecutionContext } from './toolRegistry.js';
 import { CodebaseIndexer } from './indexer.js';
-import { PatchEngine } from './patchEngine.js';
 import { extractToolCallsFromText, extractExplicitCodeFileCalls, extractCodeForKnownFile, sanitizeChatText, ChatStreamFilter } from './toolCallParser.js';
 import { ChatResponseRouter } from './chatResponseRouter.js';
 import { debugLog } from './debugLog.js';
@@ -37,7 +36,6 @@ import {
   fallbackProjectName,
   uniqueProjectFolder,
   requestedExistingProjectFolder,
-  probeRuntime,
 } from './languageRunners.js';
 import fs from 'fs';
 import path from 'path';
@@ -69,7 +67,7 @@ import { repairGreetingContract } from './greetingContract.js';
 import { repairSharedMoneyContract } from './sharedMoneyContract.js';
 import { repairMissingRelativeModule } from './moduleResolutionRepair.js';
 import { repairAxiosMaxBodyLengthContract, repairAxiosMaxBodyLengthPreflight } from './publicRepairContracts.js';
-import { parseReviewFindings } from './reviewAgent.js';
+import { parseReviewFindings, reviewResponseIsUnparseable } from './reviewAgent.js';
 import type { TavilyVerificationService } from './tavilyVerification.js';
 import { readPackageScripts, readPackageTestScript } from './packageManifest.js';
 
@@ -123,6 +121,13 @@ export interface AgentRunParams {
 }
 
 const MAX_TURNS_CEILING = 90;
+
+/**
+ * Local-model prompt budget for the live agent conversation. The turn history
+ * is trimmed from the oldest exchange group so the request and the most
+ * recent tool evidence always survive.
+ */
+const CONVERSATION_CHAR_BUDGET = 18000;
 
 /**
  * Provider adapters own HTTP-level quota retries. Do not replay the complete
@@ -599,9 +604,8 @@ export class AgentEngine {
         : localObservability();
     };
 
-    const emitPlan = () => {
-      params.onPlanUpdate?.([...plan]);
-    };
+    // NOTE: the plan is streamed by emitPhases() below (the phase snapshot is
+    // the user-visible plan). There is deliberately no second emitter here.
 
     const isCancelled = () => params.signal?.aborted || params.isCancelled?.() || false;
 
@@ -1293,6 +1297,8 @@ ${tavilyContext}${publicRagHint}${projectContextForPrompt}${ragContextForPrompt}
     // A failed tool must be repaired or explicitly reported, not hidden by
     // a later optimistic model message.
     const unresolvedToolFailures = new Map<string, string>();
+    /** Per-run count of automatic transient retries, keyed by tool failure signature. */
+    const toolRetryCounts = new Map<string, number>();
     let publicBenchmarkVerificationFingerprint = '';
     const failedToolSignature = (call: ToolCall) => `${call.name}:${String(call.args?.filePath ?? call.args?.command ?? '')}`;
     let toolRepairNudges = 0;
@@ -1522,9 +1528,15 @@ ${tavilyContext}${publicRagHint}${projectContextForPrompt}${ragContextForPrompt}
         recordToolMetric(call, result);
       }
       // Only retry transient failures on READ-ONLY tools. Repeating writes,
-      // commands or approvals can destroy data or run a command twice.
-      if (!result.success && !isCancelled() && mayRetryToolFailure(call.name, String(result.error || result.output), 0, result.needsApproval)) {
-        emitActivity('thinking', `Transient ${call.name} failure — retrying safely once`);
+      // commands or approvals can destroy data or run a command twice. The
+      // retry allowance is per failure signature, so a tool that keeps failing
+      // transiently is never replayed more than once for the same run.
+      const transientRetryKey = failedToolSignature(call);
+      const transientRetriesUsed = toolRetryCounts.get(transientRetryKey) || 0;
+      if (!result.success && !isCancelled() && !blockedByCheckpointFailure &&
+          mayRetryToolFailure(call.name, String(result.error || result.output), transientRetriesUsed, result.needsApproval)) {
+        toolRetryCounts.set(transientRetryKey, transientRetriesUsed + 1);
+        emitActivity('thinking', `Transient ${call.name} failure - retrying safely once`);
         if (taskId) this.taskStore?.recordRetry(taskId);
         result = await this.tools.executeTool(call.id, call.name, call.args, executionContext);
         allToolResults.push(result);
@@ -1765,10 +1777,21 @@ ${tavilyContext}${publicRagHint}${projectContextForPrompt}${ragContextForPrompt}
 
     /** Runs one full agent turn: model call → tool-call extraction → execution. */
     const runTurn = async (): Promise<{ text: string; toolCalls: ToolCall[]; stop: boolean }> => {
-      // Retain the request and recent tool results within a small local-model budget.
-      while (conversation.length > 4 && JSON.stringify(conversation).length > 18000) {
-        conversation.splice(1, 1);
-        while (conversation[1]?.role === 'tool') conversation.splice(1, 1);
+      // Retain the request and recent tool results within a small local-model
+      // budget. Drop whole exchange groups (an assistant turn together with
+      // its tool results) so a provider never receives an orphaned tool
+      // message, and track a running size estimate instead of re-serializing
+      // the entire conversation on every drop.
+      const messageChars = (message: AgentConversationMessage): number =>
+        message.content.length + (message.toolCalls ? JSON.stringify(message.toolCalls).length : 0);
+      let conversationChars = conversation.reduce((sum, message) => sum + messageChars(message), 0);
+      while (conversation.length > 4 && conversationChars > CONVERSATION_CHAR_BUDGET) {
+        const dropped = conversation.splice(1, 1)[0];
+        conversationChars -= messageChars(dropped);
+        while (conversation[1]?.role === 'tool') {
+          const orphan = conversation.splice(1, 1)[0];
+          conversationChars -= messageChars(orphan);
+        }
       }
       // Stream filter: only chat-safe text reaches the UI. Raw tool-call JSON
       // and large code dumps are held back — they are EXECUTED, not displayed.
@@ -2870,7 +2893,9 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
               }
               emitActivity('thinking', findings.length
                 ? 'Reviewer findings recorded; no repair turn remains, so the task will not claim review clearance'
-                : 'Independent Reviewer reported no actionable blocker or major defect');
+                : reviewResponseIsUnparseable(reviewerText)
+                  ? 'Independent review produced no parseable findings; the deterministic verifier remains authoritative'
+                  : 'Independent Reviewer reported no actionable blocker or major defect');
               if (findings.length) finalText = `${finalText.trim()}\n\nIndependent review found unresolved issues:\n${findings.map(finding => `- ${finding.severity}: ${finding.file}: ${finding.issue}`).join('\n')}`.trim();
               if (findings.length) reviewerUnresolved = true;
             } else {
@@ -3333,6 +3358,7 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
       }
       const getFingerprint = () => fingerprintWrittenFiles(workspaceRoot, writtenFiles);
       const fresh = (entry: typeof configuredChecks[number]) => entry.tool === 'run_tests' ? ranTests : entry.tool === 'run_build' ? ranBuild
+        : entry.tool === 'run_linter' ? ranValidate
         : entry.tool === 'project_health_check' ? healthCheckPassFingerprint === getFingerprint()
         : commandPasses.get(commandIdentity(entry.args.command)) === getFingerprint();
       const priorRepairTarget = repairTarget, priorRepairEvidence = repairEvidence;
@@ -3355,7 +3381,7 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
             forceFullFileRepairTarget = undefined;
             const afterFingerprint = getFingerprint();
             if (currentFingerprint !== afterFingerprint) {
-              ranTests = false; ranBuild = false; filesValidated = false;
+              ranTests = false; ranBuild = false; ranValidate = false; filesValidated = false;
               healthCheckPassFingerprint = '';
               restart = true;
               break;

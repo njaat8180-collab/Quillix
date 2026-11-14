@@ -27,7 +27,7 @@ const checks = [
   ['cached chunks are reused for unchanged files', /if \(!unchangedFiles\.has\(chunk\.file\)\) continue;/],
   ['a single-file invalidation entry point exists', /public invalidate\(relativePath\?: string\): number/],
   ['invalidation persists so a restart sees the trimmed index', /this\.persist\(\);/],
-  ['caller paths are normalized to the index key format', /function ragKey\(input: string\): string/],
+  ['caller paths are normalized to the index key format', /function ragKey\(root: string, input: string\): string/],
   ['the write route drops only the saved file from the index', /if \(result\?\.success !== false\) projectRag\.invalidate\(filePath\);/],
   ['deleting a file refreshes the whole index signature', /if \(result\?\.success !== false\) projectRag\.invalidate\(\);/],
   ['one shared index instance is used by the engine and the routes', /const projectRag = new ProjectRag\(workspaceManager\.getRoot\(\)\);/],
