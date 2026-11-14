@@ -496,6 +496,8 @@ budget was fixed in `package-resource-preflight.test.mjs`,
   - `b8e3cdb` — `fix(agent): repair broken tool contract and harden focused edits`
   - `1790334` — `test(report): cover the whitespace-tolerant edit path end-to-end and document the increment`
   - `7b930f0` — `fix(agent): stop reporting verification failures as success`
+  - `a4773d4` — `docs(report): record the round-2 commit hash and verification results`
+  - `cdc0772` — `fix(release): make the release gates match what the packager builds` (rounds 3 + 4)
 
 ### Round-2 commit
 
@@ -509,3 +511,18 @@ above, and `git status --short` is empty (clean working tree).
 The report file itself was completed with this hash after the commit, so the
 hash above is recorded in the repository's history of the source changes; the
 report text is the final working-tree version.
+
+### Round-3 / Round-4 commit
+
+```
+cdc0772286f31704a66f581deb7d0b3a2da94d87 fix(release): make the release gates match what the packager builds
+```
+
+This commit carries rounds 3 and 4: the release-gate artifact-name derivation
+with its 5-test contract, the five generous smoke-harness budgets (no
+assertion touched), the durable mission-state test fix, and the agent E2E
+harness work — host-capacity pre-flight, bounded health poll, the
+guard-vs-product failure classifier and its 6-test contract.
+
+Verified after the commit: `git log --format='%H %s' -1` returns the hash
+above, and `git status --short` is empty (clean working tree).
