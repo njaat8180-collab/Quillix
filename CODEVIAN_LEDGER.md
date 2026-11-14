@@ -96,6 +96,8 @@ dist/electron/preload.cjs                  677 B
 
 | Hash | Message |
 |---|---|
+| `3336196` | `perf(renderer,server): split renderer bundle, defer Monaco TS runtime, dedupe manifest reads` |
+| `0f2ec4e` | `fix(reliability): make uncaught exceptions fatal, keep rejections non-fatal` |
 | `3dbe7cd` | `chore(architecture): document audit, drop unused composio dep, add Electron launch contract` |
 | `db72022` | `harden(desktop): bounded server shutdown, fault visibility, dependency audit` |
 
