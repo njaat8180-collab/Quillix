@@ -50,6 +50,7 @@ import { requestedCommonJSExports, repairCommonJSExportContract } from './export
 import { repairAsyncRetryContract } from './retryContract.js';
 import { repairElectronWindowContract } from './electronContract.js';
 import { ResourceGuard } from './resourceGuard.js';
+import { readEnvNumber } from '../shared/envNumbers.js';
 
 /** Local Ollama brains use the compact tool surface regardless of tag naming. */
 export function usesCompactLocalToolSurface(provider?: string, model?: string): boolean {
@@ -2237,10 +2238,10 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
             : (directNewFile && (usesNonStreamingToolSchema || plainWebsite) ? Math.min(isSingleFileRequest ? 6144 : plainWebsite ? 4096 : 2048, budget.maxOutputTokens) : budget.maxOutputTokens),
           timeoutSeconds: (plainWebRepairWrite || compactCodeRepair || compactExistingWebsite)
             ? (fullPlainWebHtmlRepair ? 600 : compactExistingWebsite ? 60 : publicBenchmark
-              ? Math.max(30, Math.min(90, Number(process.env.QUILLIX_PUBLIC_BENCHMARK_REQUEST_TIMEOUT_SECONDS || 75)))
+              ? Math.max(30, Math.min(90, readEnvNumber('QUILLIX_PUBLIC_BENCHMARK_REQUEST_TIMEOUT_SECONDS', 75)))
               : 180)
             : (() => {
-                const benchmarkLimit = Number(process.env.QUILLIX_BENCHMARK_FIRST_TURN_TIMEOUT_SECONDS || 0);
+                const benchmarkLimit = readEnvNumber('QUILLIX_BENCHMARK_FIRST_TURN_TIMEOUT_SECONDS', 0);
                 const normal = directNewFile && usesNonStreamingToolSchema ? (qwen3LargeWebsiteTurn ? 240 : 900) : budget.focused ? 180 : 300;
                 return Number.isFinite(benchmarkLimit) && benchmarkLimit >= 30 ? Math.min(normal, benchmarkLimit) : normal;
               })(),
@@ -2255,7 +2256,7 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
           // routinely cut off the fallback before it could repair script.js.
           ...(qwen3LargeWebsiteTurn || compactCodeRepair || focusedRepair || compactExistingWebsite ? {
             totalTimeoutSeconds: publicBenchmark
-              ? Math.max(45, Math.min(120, Number(process.env.QUILLIX_PUBLIC_BENCHMARK_TOTAL_TIMEOUT_SECONDS || 90)))
+              ? Math.max(45, Math.min(120, readEnvNumber('QUILLIX_PUBLIC_BENCHMARK_TOTAL_TIMEOUT_SECONDS', 90)))
               : compactExistingWebsite ? 300 : 240,
           } : {}),
           signal: params.signal,

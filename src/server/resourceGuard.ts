@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { isOverdriveActive } from '../shared/overdriveState.js';
+import { readEnvNumber } from '../shared/envNumbers.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -90,8 +91,7 @@ const DEFAULT_LIMITS: ResourceLimits = {
 };
 
 function numberEnv(name: string, fallback: number): number {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) ? value : fallback;
+  return readEnvNumber(name, fallback);
 }
 
 function diskStats(root: string): { freeBytes: number; totalBytes: number } | undefined {

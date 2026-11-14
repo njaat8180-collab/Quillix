@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import {readEncryptedKeyPool, saveEncryptedKeyToPool, clearEncryptedKeyPool, encryptedKeyPoolCount} from './encryptedKeyPool.js';
 import { DEFAULT_ONLINE_PROVIDER_MIN_INTERVAL_MS, getEffectiveProviderConcurrency, getEffectiveProviderIntervalMs } from '../shared/providerPacing.js';
+import { readEnvNumber } from '../shared/envNumbers.js';
 
 export function parseSarvamRetryAfterMs(value: string | null | undefined, now = Date.now()): number {
   const header = value?.trim();
@@ -319,7 +320,7 @@ export class SarvamProvider implements AIProvider {
       }
       // Starter keys are capped at 4096 output tokens. Higher limits need
       // an explicit account-tier override; 8192 was causing HTTP 400.
-      const configuredCap = Number(process.env.SARVAM_MAX_TOKENS);
+      const configuredCap = readEnvNumber('SARVAM_MAX_TOKENS', 4096);
       const planCap = Number.isInteger(configuredCap) && configuredCap >= 1 && configuredCap <= 128000
         ? configuredCap : 4096;
       const desired = opts.maxOutputTokens === undefined ? planCap : opts.maxOutputTokens;

@@ -1,6 +1,7 @@
 import { ToolCall, ToolDefinition } from '../shared/types.js';
 import { DEFAULT_LOCAL_OLLAMA_MODEL } from '../shared/modelDefaults.js';
 import { debugLog } from './debugLog.js';
+import { readEnvNumber } from '../shared/envNumbers.js';
 
 export interface AICompletionOptions {
   model?: string;
@@ -415,9 +416,9 @@ export class OllamaQwenProvider implements AIProvider {
    */
   public async warmUp(model = this.defaultModel, options: OllamaWarmUpOptions = {}): Promise<void> {
     await this.ensureModel(model);
-    const timeoutSeconds = Math.min(300, Math.max(5, Math.floor(options.timeoutSeconds ?? Number(process.env.OLLAMA_WARMUP_TIMEOUT_SECONDS || 90))));
-    const retries = Math.min(2, Math.max(0, Math.floor(options.retries ?? Number(process.env.OLLAMA_WARMUP_RETRIES || 1))));
-    const backoffMs = Math.min(5000, Math.max(50, Math.floor(options.backoffMs ?? Number(process.env.OLLAMA_WARMUP_BACKOFF_MS || 500))));
+    const timeoutSeconds = Math.min(300, Math.max(5, Math.floor(options.timeoutSeconds ?? readEnvNumber('OLLAMA_WARMUP_TIMEOUT_SECONDS', 90))));
+    const retries = Math.min(2, Math.max(0, Math.floor(options.retries ?? readEnvNumber('OLLAMA_WARMUP_RETRIES', 1))));
+    const backoffMs = Math.min(5000, Math.max(50, Math.floor(options.backoffMs ?? readEnvNumber('OLLAMA_WARMUP_BACKOFF_MS', 500))));
     let lastError: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (options.signal?.aborted) throw new Error('Ollama warm-up was cancelled.');

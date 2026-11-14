@@ -15,6 +15,7 @@ import {
   sanitizeSearchQuery,
   withinSearchBudget,
 } from '../shared/webSearchPolicy.js';
+import { readEnvNumber } from '../shared/envNumbers.js';
 
 export type TavilyFinding = 'supported' | 'possibly_stale' | 'contradicted' | 'unverified' | 'offline';
 export type TavilySource = {
@@ -98,8 +99,7 @@ const TAVILY_MAX_ATTEMPTS = 2;
 /** Tavily's current pay-as-you-go reference is $0.008 per credit. Allow an
  * account-specific override because plan pricing and currency can differ. */
 export function tavilyCostPerCreditUsd(): number {
-  const configured = Number(process.env.QUILLIX_TAVILY_COST_PER_CREDIT_USD);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 0.008;
+  return readEnvNumber('QUILLIX_TAVILY_COST_PER_CREDIT_USD', 0.008, { min: 0 });
 }
 
 function cleanKey(value: string): string {
