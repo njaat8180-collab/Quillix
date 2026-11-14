@@ -3,7 +3,6 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
 import { inspectBrowserScripts, checkExplicitWebRequirements, type BrowserIssue } from '../../src/server/browserChecks.js';
-import { writeAuraFixture, AURA_ACCEPTANCE_PROMPT, FIXTURE_MARKER, FIXTURE_VERSION } from './auraFixture.js';
 
 type Listener = (event?: unknown) => void;
 
@@ -11,13 +10,7 @@ class FakeElement {
   public value = '';
   public hidden = false;
   public textContent = '';
-  private innerHtmlValue = '';
-  public get innerHTML(): string { return this.innerHtmlValue; }
-  /** Assigning innerHTML replaces the child nodes, exactly like the DOM. */
-  public set innerHTML(value: string) {
-    this.innerHtmlValue = value;
-    this.children = [];
-  }
+  public innerHTML = '';
   public style: Record<string, string> = {};
   public children: FakeElement[] = [];
   public listeners = new Map<string, Listener[]>();
@@ -30,12 +23,7 @@ class FakeElement {
   }
 
   dispatchEvent(event: { type: string }) {
-    // Real DOM events expose the element that received the event as both
-    // `target` and (during dispatch) `currentTarget`. The harness previously
-    // forwarded the bare event object, so any handler written against the
-    // browser API crashed with "cannot read properties of undefined".
-    const dispatched = { ...event, target: this, currentTarget: this };
-    for (const listener of this.listeners.get(event.type) || []) listener.call(this, dispatched);
+    for (const listener of this.listeners.get(event.type) || []) listener.call(this, event);
   }
 
   click() { this.dispatchEvent({ type: 'click' }); }
@@ -50,13 +38,10 @@ function htmlElements(html: string): FakeElement[] {
   let match: RegExpExecArray | null;
   while ((match = tags.exec(html))) {
     const attrs = match[2] || '';
-    // Attribute names must be preceded by whitespace. A bare \b boundary also
-    // matches the tail of data-* attributes (e.g. "data-product-id" was read
-    // as id="product-1"), which duplicated every product card in the harness.
-    const id = attrs.match(/(?:^|\s)id\s*=\s*["']([^"']+)["']/i)?.[1] || '';
-    const className = attrs.match(/(?:^|\s)class\s*=\s*["']([^"']+)["']/i)?.[1] || '';
+    const id = attrs.match(/\bid\s*=\s*["']([^"']+)["']/i)?.[1] || '';
+    const className = attrs.match(/\bclass\s*=\s*["']([^"']+)["']/i)?.[1] || '';
     const attributes: Record<string, string> = {};
-    for (const attr of attrs.matchAll(/(?:^|\s)([\w:-]+)\s*=\s*["']([^"']*)["']/g)) attributes[attr[1]] = attr[2];
+    for (const attr of attrs.matchAll(/([\w:-]+)\s*=\s*["']([^"']*)["']/g)) attributes[attr[1]] = attr[2];
     elements.push(new FakeElement(match[1].toLowerCase(), id, className, attributes));
   }
   return elements;
@@ -97,32 +82,12 @@ function issue(filePath: string, check: string, error: string): BrowserIssue {
 
 async function main() {
   const root = path.resolve(process.env.SMOKE_ROOT || 'test/qwen-ecommerce-WxPTxO');
-  const projectName = process.env.SMOKE_PROJECT || 'AURA';
-  const project = path.join(root, projectName);
+  const project = path.join(root, process.env.SMOKE_PROJECT || 'AURA');
   const files = {
     html: path.join(project, 'index.html'),
     css: path.join(project, 'style.css'),
     js: path.join(project, 'script.js'),
   };
-  // The default workspace is git-ignored and normally produced by the
-  // live-Ollama benchmark (`scripts/smoke/high-end-ecommerce.ts`), so it does
-  // not exist on a clean checkout or on a machine without a local model.
-  // Provision a deterministic fixture instead of failing with ENOENT.
-  if (!process.env.SMOKE_ROOT) {
-    // The default workspace is disposable: regenerate it whenever it is
-    // missing, incomplete, or carries a stale fixture version. This keeps the
-    // acceptance gate deterministic across clean checkouts and reruns.
-    const markerPath = path.join(project, FIXTURE_MARKER);
-    const markerVersion = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, 'utf8').trim() : '';
-    const fixtureComplete = fs.existsSync(files.html) && fs.existsSync(files.css) && fs.existsSync(files.js);
-    if (!fixtureComplete || markerVersion !== FIXTURE_VERSION) {
-      fs.mkdirSync(root, { recursive: true });
-      writeAuraFixture({ root, project: projectName });
-      console.log(`provisioned deterministic acceptance fixture at ${project}`);
-    }
-  } else if (!fs.existsSync(files.html) || !fs.existsSync(files.css) || !fs.existsSync(files.js)) {
-    console.error(`SMOKE_ROOT fixture is incomplete: expected ${files.html}, ${files.css} and ${files.js}.`);
-  }
   const report: { root: string; project: string; checks: Array<{ name: string; ok: boolean; error?: string }>; staticIssues: BrowserIssue[]; runtimeError?: string } = {
     root, project, checks: [], staticIssues: [],
   };
@@ -134,6 +99,21 @@ async function main() {
   const relativeJs = `${process.env.SMOKE_PROJECT || 'AURA'}/script.js`;
   const allFiles = [relativeHtml, `${process.env.SMOKE_PROJECT || 'AURA'}/style.css`, relativeJs];
   const byRelative = (relative: string) => read(path.join(root, relative));
+
+  // This check replays a project generated by the live e-commerce benchmark
+  // (`npm run benchmark:high-end-ecommerce`, which needs a reachable Ollama
+  // model). That project is a generated artifact under `test/`, so it is never
+  // present on a fresh clone. When it is entirely absent, report the exact
+  // reproduction steps instead of a pile of missing-file checks followed by an
+  // ENOENT while writing the report.
+  if (!fs.existsSync(files.html) && !fs.existsSync(files.css) && !fs.existsSync(files.js)) {
+    console.error(`Website behavior check: no generated project at ${project}.`);
+    console.error('Generate it first: npm run benchmark:high-end-ecommerce (needs a reachable Ollama model),');
+    console.error('or point SMOKE_ROOT/SMOKE_PROJECT at an existing generated project.');
+    console.error(`Missing: ${files.html}, ${files.css}, ${files.js}`);
+    process.exitCode = 1;
+    return;
+  }
 
   for (const [name, file] of Object.entries(files)) {
     const ok = fs.existsSync(file) && (read(file) || '').trim().length > 0;
@@ -147,7 +127,7 @@ async function main() {
   }
   report.staticIssues.push(...inspectBrowserScripts(relativeHtml, html, relative => byRelative(relative)));
   report.staticIssues.push(...checkExplicitWebRequirements(
-    AURA_ACCEPTANCE_PROMPT,
+    'Build a polished high-end animated responsive e-commerce website with search, category filter, cart, checkout, keyboard accessibility and localStorage persistence.',
     allFiles,
     relative => byRelative(relative),
   ));
@@ -155,7 +135,6 @@ async function main() {
 
   if (js.trim()) {
     const runtime = createRuntime(html);
-    let bootstrapped = false;
     try {
       vm.runInNewContext(js, {
         document: runtime.document,
@@ -165,7 +144,6 @@ async function main() {
         clearTimeout,
         window: { document: runtime.document, localStorage: runtime.localStorage },
       }, { filename: files.js, timeout: 2_000 });
-      bootstrapped = true;
       report.checks.push({ name: 'runtime-bootstrap', ok: true });
       const search = runtime.elements.find(element => element.id === 'search-input');
       const cards = runtime.elements.filter(element => /^product-[1-6]$/.test(element.id));
@@ -198,21 +176,12 @@ async function main() {
       report.checks.push({ name: 'runtime-interactions', ok: true });
     } catch (error) {
       report.runtimeError = String(error instanceof Error ? error.message : error);
-      // Report the phase that actually failed. Previously an interaction
-      // failure was reported as a bootstrap failure, which hid the real cause.
-      if (bootstrapped) {
-        report.checks.push({ name: 'runtime-interactions', ok: false, error: report.runtimeError });
-      } else {
-        report.checks.push({ name: 'runtime-bootstrap', ok: false, error: report.runtimeError });
-        report.checks.push({ name: 'runtime-interactions', ok: false, error: 'Skipped because bootstrap threw an exception.' });
-      }
+      report.checks.push({ name: 'runtime-bootstrap', ok: false, error: report.runtimeError });
+      report.checks.push({ name: 'runtime-interactions', ok: false, error: 'Skipped because bootstrap threw an exception.' });
     }
   }
   const allOk = report.checks.every(check => check.ok);
   const output = { ...report, allOk, note: 'This is a deterministic static/fake-DOM smoke. It is not a substitute for a real headless-browser interaction test.' };
-  // The report directory may not exist yet (the default root is created only
-  // when the fixture is provisioned). Create it so the gate reports a real
-  // result instead of crashing with ENOENT.
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(path.join(root, 'behavior-report.json'), JSON.stringify(output, null, 2));
   console.log(JSON.stringify(output, null, 2));

@@ -440,7 +440,14 @@ export class NodeDebugger {
     const session = this.session(sessionId);
     if (session.status !== 'exited' && session.status !== 'stopped') {
       try { session.child.kill(); } catch { /* Process may have already exited. */ }
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for the child to actually exit. On Windows a killed child can keep
+      // file handles open for a short while; a fixed sleep is a guess, and the
+      // workspace cleanup that follows fails with EBUSY while the guess is wrong.
+      await new Promise<void>(resolve => {
+        if (session.child.exitCode !== null || session.child.signalCode !== null) { resolve(); return; }
+        const timer = setTimeout(() => resolve(), 1500);
+        session.child.once('exit', () => { clearTimeout(timer); resolve(); });
+      });
     }
     try { session.socket?.close(); } catch { /* Already closed. */ }
     session.status = session.status === 'exited' ? 'exited' : 'stopped';

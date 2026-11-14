@@ -101,17 +101,29 @@ describe('parseMissionState', () => {
     expect(state.startedAt).toBeNull();
   });
 
-  // The persisted state file lives under .quillix/ (gitignored), so a fresh
-  // clone/worktree has none yet. Skip instead of failing on a missing fixture.
-  const missionStateFile = path.join(process.cwd(), ...MISSION_STATE_PATH);
-  it.skipIf(!fs.existsSync(missionStateFile))('reads the real persisted mission state', () => {
-    const persisted = JSON.parse(fs.readFileSync(missionStateFile, 'utf8'));
+  it('reads the persisted mission state (live when present, fixture otherwise)', () => {
+    // The persisted mission state is intentionally gitignored (`**/.quillix/`),
+    // so a fresh clone or a fresh git worktree carries no mission state at all.
+    // Validate the live operator state when the tree has it and the tracked
+    // fixture otherwise, so this case is reproducible on every checkout instead
+    // of failing purely because of the environment.
+    const live = path.join(process.cwd(), ...MISSION_STATE_PATH);
+    const fixture = path.join(process.cwd(), 'scripts', 'smoke', 'fixtures', 'mission', 'goal-state.json');
+    const file = fs.existsSync(live) ? live : fixture;
+    expect(fs.existsSync(file)).toBe(true);
+    const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
     const state = parseMissionState(persisted);
     expect(state.mission).toBe('QUILLIX > CURSOR');
     expect(state.counts).toEqual(persisted.counts);
     expect(state.counts.completed + state.counts.inProgress + state.counts.pending).toBe(state.counts.total);
     expect(state.verifiedProgressPercent).toBe(computeVerifiedProgressPercent(state.counts));
-    expect(state.releaseGates.length).toBeGreaterThan(0);
+    expect(state.releaseGates).not.toEqual([]);
+    // The fixture must never claim a Cursor baseline it did not measure.
+    expect(persisted.benchmarks.cursorBaseline).toBe('not-collected');
+    // A critical blocker always needs an approval.
+    for (const blocker of persisted.blockers) {
+      if (blocker.severity === 'critical') expect(blocker.approvalRequired).toBe(true);
+    }
   });
 });
 
