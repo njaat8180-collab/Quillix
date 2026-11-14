@@ -109,6 +109,187 @@ export class ApiBridge {
     }
   }
 
+  // --- M7.4: contextual chat (ask about one specific line) ---
+  public async askAboutLine(input: {
+    filePath: string;
+    line: number;
+    content: string;
+    question: string;
+  }): Promise<{ success: boolean; answer?: string; filePath?: string; line?: number; error?: string }> {
+    try {
+      const res = await fetch('/api/editor/ask-line', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'The question could not be answered.' }));
+    } catch {
+      return { success: false, error: 'The question request failed.' };
+    }
+  }
+
+  // --- M9.6: workspace lock (concurrent workspace safety) ---
+  public async getWorkspaceLockStatus(): Promise<{
+    success: boolean;
+    lock?: {
+      workspace: string;
+      lockPath: string;
+      held: boolean;
+      stale: boolean;
+      ageMs: number;
+      reason: string;
+      fallbackLocation: boolean;
+      owner?: { sessionId: string; instanceId: string; pid: number; hostname: string; username: string; appVersion: string; acquiredAt: string; heartbeatAt: string };
+    };
+    ownedByThisInstance?: boolean;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch('/api/workspace/lock', { cache: 'no-store' });
+      return await res.json();
+    } catch {
+      return { success: false, error: 'Workspace lock status unavailable.' };
+    }
+  }
+
+  public async acquireWorkspaceLock(): Promise<{ success: boolean; lock?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/workspace/lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not claim the workspace.' }));
+    } catch {
+      return { success: false, error: 'Could not claim the workspace.' };
+    }
+  }
+
+  public async releaseWorkspaceLock(): Promise<{ success: boolean; lock?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/workspace/lock/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not release the workspace lock.' }));
+    } catch {
+      return { success: false, error: 'Could not release the workspace lock.' };
+    }
+  }
+
+  // --- M9.3: provider key health (no key material is ever returned) ---
+  public async getProviderKeyHealth(): Promise<{
+    success: boolean;
+    providers?: Array<{
+      provider: string;
+      total: number;
+      healthy: number;
+      coolingDown: number;
+      disabled: number;
+      activeKeyId?: string;
+      keys: Array<{
+        keyId: string;
+        status: 'healthy' | 'cooldown' | 'disabled';
+        failureKind?: string;
+        cooldownUntil?: number;
+        consecutiveFailures: number;
+        lastFailureAt?: number;
+        lastSuccessAt?: number;
+        requests: number;
+        failures: number;
+      }>;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch('/api/providers/key-health', { cache: 'no-store' });
+      return await res.json();
+    } catch {
+      return { success: false, error: 'Provider key health unavailable.' };
+    }
+  }
+
+  // --- M3.6: git bisect assist ---
+  public async getGitBisectProgress(): Promise<{
+    success: boolean;
+    progress?: {
+      active: boolean;
+      session: any;
+      currentShort?: string;
+      currentSubject?: string;
+      remaining: number;
+      tested: number;
+      estimatedTotal: number;
+      message: string;
+    };
+    error?: string;
+  }> {
+    try {
+      const res = await fetch('/api/git/bisect', { cache: 'no-store' });
+      return await res.json();
+    } catch {
+      return { success: false, error: 'Bisect progress unavailable.' };
+    }
+  }
+
+  public async startGitBisect(payload: {
+    good: string;
+    bad: string;
+    testCommand: string;
+    timeoutMs?: number;
+  }): Promise<{ success: boolean; session?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/git/bisect/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not start the bisect session.' }));
+    } catch {
+      return { success: false, error: 'Could not start the bisect session.' };
+    }
+  }
+
+  public async runGitBisectStep(): Promise<{ success: boolean; classification?: string; session?: any; progress?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/git/bisect/step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not run the bisect step.' }));
+    } catch {
+      return { success: false, error: 'Could not run the bisect step.' };
+    }
+  }
+
+  public async recoverGitBisect(): Promise<{ success: boolean; session?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/git/bisect/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not recover the bisect session.' }));
+    } catch {
+      return { success: false, error: 'Could not recover the bisect session.' };
+    }
+  }
+
+  public async finishGitBisect(): Promise<{ success: boolean; session?: any; error?: string }> {
+    try {
+      const res = await fetch('/api/git/bisect/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationMode: 'agent' }),
+      });
+      return await res.json().catch(() => ({ success: false, error: 'Could not finish the bisect session.' }));
+    } catch {
+      return { success: false, error: 'Could not finish the bisect session.' };
+    }
+  }
+
   // --- M4.4: named checkpoints ---
   public async listCheckpoints(): Promise<{ success: boolean; checkpoints: Array<{ id: string; name: string; createdAt: number; fileCount: number; totalBytes: number; truncated: boolean }>; error?: string }> {
     try {

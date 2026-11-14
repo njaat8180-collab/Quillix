@@ -65,6 +65,21 @@ describe('shared source-secret redaction', () => {
     expect(redacted).toContain('token budget is 1200 tokens');
   });
 
+  it('masks an OpenAI-style key even when the variable name does not look like a secret', () => {
+    // OpenAI keys use a hyphen: "sk-<48 chars>" / "sk-proj-<...>". A variable
+    // named `openaiKey` does not match the generic "api key / token" pattern,
+    // so the provider pattern is the only thing that can protect it.
+    const openaiKey = 'sk-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456';
+    const openaiProjectKey = 'sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX';
+    for (const secret of [openaiKey, openaiProjectKey]) {
+      const redacted = redactSensitiveText(`const openaiKey = "${secret}";`);
+      expect(redacted).not.toContain(secret);
+      expect(redacted).toContain('[REDACTED_PROVIDER_KEY]');
+      const workspaceRedacted = new WorkspaceManager(process.cwd()).redactSecrets(`const openaiKey = "${secret}";`);
+      expect(workspaceRedacted).not.toContain(secret);
+    }
+  });
+
   it('round-trips opaque handles without exposing the original credential', () => {
     const secret = 'sk_live_abcdefghijklmnop123456';
     const result = redactSensitiveTextForRoundTrip(`const apiKey = "${secret}";`);

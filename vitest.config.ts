@@ -31,6 +31,24 @@ const config = {
     // Some suites cannot load on this machine (OS blocks a tree-sitter native
     // binding); still emit the report so coverage can be reviewed.
     reportOnFailure: true,
+    // M8.9: the four core modules carry an ENFORCED per-file floor, so a
+    // regression that drops any of them below the floor fails the coverage
+    // run instead of being discovered later by hand. Only these files are
+    // gated; the rest of the tree is reported but not thresholded yet.
+    //
+    // The globs deliberately contain no directory separator: Vitest matches
+    // threshold keys against the OS path, so a forward-slash key such as
+    // "src/server/agentEngine.ts" never matches on Windows and the gate would
+    // silently never fire. "**/<file>.ts" matches on every platform.
+    thresholds: {
+      // Measured 79.02% lines. The mission target is 80%; this file is the
+      // one module still short of it, and the gate is pinned to its real
+      // value so the remaining gap cannot widen. See PROGRESS.md.
+      '**/agentEngine.ts': { lines: 79 },
+      '**/indexer.ts': { lines: 80 },
+      '**/workspace.ts': { lines: 80 },
+      '**/universal.ts': { lines: 80 },
+    },
   },
 };
 

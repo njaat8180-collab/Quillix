@@ -85,6 +85,19 @@ for (const file of tsxFiles) {
 }
 assert.equal(deadControls.length, 0, `dead-controls contract: found button controls with no handler:\n${deadControls.join('\n')}`);
 
+// The extractor itself must be proven in both directions, otherwise a
+// regression that truncates every tag would silently pass this contract.
+{
+  const wired = '<button ref={(el) => { if (el) el.focus(); }} onClick={go}>Go</button>';
+  const dead = '<button className="x">Dead</button>';
+  const wiredTags = buttonOpeningTags(wired);
+  const deadTags = buttonOpeningTags(dead);
+  assert.equal(wiredTags.length, 1, 'dead-controls contract: the extractor finds one button in an arrow-attribute tag');
+  assert.ok(OPERABLE.test(wiredTags[0]), 'dead-controls contract: an arrow-attribute button with a handler is not reported as dead');
+  assert.equal(deadTags.length, 1, 'dead-controls contract: the extractor finds one button in a plain tag');
+  assert.ok(!OPERABLE.test(deadTags[0]), 'dead-controls contract: a genuinely handler-less button is still reported');
+}
+
 // --- the cockpit debug tools must be wired to real diagnostics -------------
 has(cockpit, 'const loadDebugSection = async', 'cockpit defines the debug section loader');
 has(cockpit, 'const exportDebugBundle = ', 'cockpit defines the bundle exporter');

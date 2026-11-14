@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { FileNode, SearchMatch } from '../shared/types.js';
 import { redactSensitiveText } from '../shared/secretRedaction.js';
 import { MAX_FILE_BYTES, fileSizeLimitError } from '../shared/largeFile.js';
-import { isBackupTreeDirectory, isExcludedDiscoveryPath } from './workspaceExclusions.js';
+import { assertWorkspaceWritable } from './workspaceLock.js';
 
 // ---------------------------------------------------------------------------
 // Hardening constants
@@ -52,6 +52,17 @@ export class WorkspaceManager {
 
   public getRoot(): string {
     return this.workspaceRoot;
+  }
+
+  /**
+   * M9.6: refuse to mutate the workspace while another live NUVRO AI instance
+   * owns it. The owning instance itself is always allowed, and a lock whose
+   * owner crashed is ignored so the workspace recovers automatically.
+   */
+  private guardExclusiveWrite(): { success: boolean; error?: string } | null {
+    const guard = assertWorkspaceWritable(this.workspaceRoot);
+    if (guard.ok) return null;
+    return { success: false, error: guard.error };
   }
 
   /**
@@ -119,7 +130,6 @@ export class WorkspaceManager {
     }
 
     const SKIP = new Set(['node_modules', '.git', '__pycache__', 'dist', 'build', 'target', '.quillix', 'venv', '.venv', '.next', 'coverage']);
-    const isSkippedEntry = (name: string) => SKIP.has(name) || isBackupTreeDirectory(name);
     let fileCount = 0;
     let directoryCount = 0;
     const lines: string[] = [relativePath === '.' ? path.basename(check.fullPath) || '.' : relativePath];
@@ -133,7 +143,7 @@ export class WorkspaceManager {
         return;
       }
       const visible = entries
-        .filter((e) => !isSkippedEntry(e.name))
+        .filter((e) => !SKIP.has(e.name))
         .sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
       visible.forEach((e, i) => {
         const last = i === visible.length - 1;
@@ -361,8 +371,7 @@ export class WorkspaceManager {
             entry.name === '.vscode' ||
             entry.name === '.idea' ||
             entry.name === 'build' ||
-            entry.name.endsWith('.log') ||
-            isBackupTreeDirectory(entry.name)
+            entry.name.endsWith('.log')
           ) {
             continue;
           }
@@ -513,6 +522,8 @@ export class WorkspaceManager {
   public writeFile(relativePath: string, content: string): { success: boolean; error?: string; verified?: boolean; sizeBytes?: number } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     // M9.5: refuse oversized writes before touching the disk, with the same
     // honest limit the read path enforces.
     if (Buffer.byteLength(content || '', 'utf8') > MAX_FILE_BYTES) {
@@ -538,6 +549,8 @@ export class WorkspaceManager {
   public createFile(relativePath: string, content = ''): { success: boolean; error?: string; verified?: boolean; sizeBytes?: number } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     // M9.5: same oversized-write refusal as writeFile.
     if (Buffer.byteLength(content || '', 'utf8') > MAX_FILE_BYTES) {
       return { success: false, error: fileSizeLimitError(Buffer.byteLength(content || '', 'utf8')) };
@@ -566,6 +579,8 @@ export class WorkspaceManager {
   public deleteFile(relativePath: string): { success: boolean; error?: string } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     if (path.relative(this.workspaceRoot, check.fullPath) === '') return { success: false, error: 'Cannot delete the active workspace root.' };
 
     try {
@@ -590,6 +605,8 @@ export class WorkspaceManager {
 
     if (!oldCheck.safe) return { success: false, error: oldCheck.error };
     if (!newCheck.safe) return { success: false, error: newCheck.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
 
     try {
       if (!fs.existsSync(oldCheck.fullPath)) {
@@ -656,7 +673,6 @@ export class WorkspaceManager {
       if (options.wholeWord) pattern = `\\b${pattern}\\b`;
       const regex = new RegExp(pattern, options.caseSensitive ? 'g' : 'gi');
       const SKIP = new Set(['node_modules', '.git', '.quillix', 'dist', 'build', '.next', '.venv', 'venv', 'coverage', '__pycache__']);
-      const isSkippedEntry = (name: string) => SKIP.has(name) || isBackupTreeDirectory(name);
       const EXT_SKIP = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.exe', '.dll', '.woff', '.woff2', '.mp4', '.mp3']);
       let filesVisited = 0;
       let bytesVisited = 0;
@@ -665,14 +681,14 @@ export class WorkspaceManager {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           if (matches.length >= 100 || filesVisited >= 10000 || bytesVisited >= 32 * 1024 * 1024) break;
-          if (entry.isSymbolicLink() || isSkippedEntry(entry.name)) continue;
+          if (entry.isSymbolicLink() || SKIP.has(entry.name)) continue;
           const fullPath = path.join(dir, entry.name);
           const relPath = path.relative(this.workspaceRoot, fullPath).replace(/\\/g, '/');
           if (entry.isDirectory()) {
             walk(fullPath);
             continue;
           }
-          if (!entry.isFile() || WorkspaceManager.isSecretPath(relPath) || isExcludedDiscoveryPath(relPath) || EXT_SKIP.has(path.extname(entry.name).toLowerCase())) continue;
+          if (!entry.isFile() || WorkspaceManager.isSecretPath(relPath) || EXT_SKIP.has(path.extname(entry.name).toLowerCase())) continue;
           try {
             const size = fs.statSync(fullPath).size;
             if (size > 2 * 1024 * 1024) continue;

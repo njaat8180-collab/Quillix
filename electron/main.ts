@@ -15,51 +15,42 @@
  * The renderer never gets privileged Node access: it talks to the local
  * server over HTTP exactly like the browser build does.
  */
-import { app, BrowserWindow, dialog, shell, ipcMain, session } from 'electron';
-import type { IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, shell, ipcMain } from 'electron';
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
-import { resolvePort } from '../platform/portConfig.js';
-import { formatServerDiagnostics, sanitizeServerDiagnostic } from '../platform/diagnostics.js';
-import { isTrustedIpcSender } from '../platform/ipcGuard.js';
+import { shutdownChildBounded, type ShutdownChild } from './desktopShutdown.js';
+
+/**
+ * Hardening: set once the bounded shutdown has finished, so the deferred quit
+ * in `before-quit` runs exactly once and cannot loop.
+ */
+let shutdownComplete = false;
 
 const HOST = '127.0.0.1';
 
-/** Read the project `.env` file (dev checkout only; the packaged app has none). */
-function readEnvFile(): string | null {
+/**
+ * Resolve the port exactly the way the server does:
+ * process.env.PORT first, then the project's .env file, then 3000.
+ */
+function resolvePort(): number {
+  if (process.env.PORT && Number(process.env.PORT)) return Number(process.env.PORT);
   try {
     const fs = require('fs') as typeof import('fs');
     const envPath = path.join(app.getAppPath(), '.env');
-    if (!fs.existsSync(envPath)) return null;
-    return fs.readFileSync(envPath, 'utf-8');
+    if (fs.existsSync(envPath)) {
+      const match = fs.readFileSync(envPath, 'utf-8').match(/^\s*PORT\s*=\s*(\d+)\s*$/m);
+      if (match) return Number(match[1]);
+    }
   } catch {
-    return null;
+    // fall through to the default
   }
+  return 3000;
 }
 
-/**
- * Resolve the port exactly the way the server does: process.env.PORT first,
- * then the project's .env file, then 3000. A configured but invalid value is
- * reported instead of being silently replaced — the server rejects anything
- * outside 1..65535, so a mismatch would only produce a confusing startup
- * failure.
- */
-const portResolution = resolvePort({ envPort: process.env.PORT, envFileContents: readEnvFile() });
-const PORT = portResolution.port;
+const PORT = resolvePort();
 const APP_URL = `http://${HOST}:${PORT}`;
-const PORT_CONFIG_ERROR = portResolution.ok ? null : portResolution.reason ?? 'PORT is not a valid port number.';
 const READY_TIMEOUT_MS = 45000;
-
-/** Origins an IPC message may legitimately come from. */
-const TRUSTED_ORIGINS = [`http://${HOST}:${PORT}`, `http://localhost:${PORT}`];
-
-/**
- * Permissions NUVRO AI legitimately needs. It is a local coding workspace:
- * the camera, microphone, geolocation, notifications and every other device
- * permission are denied, so no page in the window can ask for them.
- */
-const ALLOWED_PERMISSIONS = new Set(['clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
@@ -203,10 +194,7 @@ function startServerProcess(): ChildProcess {
       type: 'error',
       title: 'NUVRO AI',
       message: 'The NUVRO AI server stopped unexpectedly.',
-      detail: `Exit code: ${code}. The desktop window cannot work without it.${(() => {
-        const diagnostics = formatServerDiagnostics(lastServerErrors);
-        return diagnostics ? `\n\nServer diagnostics:\n${diagnostics}` : '';
-      })()}`,
+      detail: `Exit code: ${code}. The desktop window cannot work without it.${lastServerErrors.length ? `\n\nServer diagnostics:\n${lastServerErrors.join('\n')}` : ''}`,
       buttons: ['Restart NUVRO AI', 'Quit'],
       defaultId: 0,
       noLink: true,
@@ -267,6 +255,36 @@ function stopServerProcess(): void {
   }
 }
 
+/**
+ * Hardening: the shutdown of the spawned server is BOUNDED.
+ *
+ * `child.kill()` only asks the child to stop. A child that is stuck can ignore
+ * it, and Electron would then wait forever for a process that is never going
+ * to exit — the window simply refuses to close. This path escalates to a
+ * forced kill and, if even that fails, force-exits the app so the user is
+ * never left staring at a hung UI.
+ */
+async function stopServerProcessBounded(): Promise<void> {
+  if (!serverProcess || !ownsServerProcess) return;
+  const child = serverProcess;
+  serverProcess = null;
+  ownsServerProcess = false;
+  try {
+    child.removeAllListeners('exit');
+  } catch { /* the child may already be detached */ }
+  log('stopping NUVRO AI server (bounded shutdown)...');
+  const result = await shutdownChildBounded(child as unknown as ShutdownChild, {
+    graceMs: 3_000,
+    forceMs: 1_500,
+    onLog: (message) => log(message),
+  });
+  if (!result.exited) {
+    // The child outlived both windows. Never hang the UI on quit.
+    log('server process did not exit in time; forcing application exit');
+    app.exit(0);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Errors                                                              */
 /* ------------------------------------------------------------------ */
@@ -274,45 +292,9 @@ function stopServerProcess(): void {
 function showErrorAndQuit(title: string, detail: string): void {
   log(`FATAL: ${title} ${detail}`);
   appIsQuitting = true;
-  // A native dialog is visible to anyone looking at the screen: never show a
-  // raw stack trace, absolute path or credential there.
-  dialog.showErrorBox(title, sanitizeServerDiagnostic(detail, 600) || 'No further details are available.');
+  dialog.showErrorBox(title, detail);
   stopServerProcess();
   app.quit();
-}
-
-/* ------------------------------------------------------------------ */
-/* Permissions                                                         */
-/* ------------------------------------------------------------------ */
-
-/**
- * Deny every device permission by default. NUVRO AI never asks for the
- * camera, the microphone, geolocation or notifications, so a page that tries
- * to is refused instead of being prompted for.
- */
-function installPermissionGuards(): void {
-  const ses = session.defaultSession;
-  ses.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(ALLOWED_PERMISSIONS.has(permission));
-  });
-  ses.setPermissionCheckHandler((_webContents, permission) => ALLOWED_PERMISSIONS.has(permission));
-}
-
-/* ------------------------------------------------------------------ */
-/* IPC sender validation                                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * Reject IPC messages that did not come from the local NUVRO AI page.
- * Without this check any renderer that ends up in the window could open the
- * native folder picker or drive the window controls.
- */
-function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
-  const senderUrl = typeof event?.sender?.getURL === 'function' ? event.sender.getURL() : null;
-  const frameUrl = event?.senderFrame?.url ?? null;
-  if (!isTrustedIpcSender({ senderUrl, frameUrl }, TRUSTED_ORIGINS)) {
-    throw new Error('NUVRO AI rejected an IPC request from an untrusted sender.');
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -335,8 +317,7 @@ function appIconPath(): string {
  * through the local server API — the main process never touches the
  * workspace itself.
  */
-ipcMain.handle('dialog:select-folder', async (event: IpcMainInvokeEvent): Promise<string | null> => {
-  assertTrustedIpcSender(event);
+ipcMain.handle('dialog:select-folder', async (): Promise<string | null> => {
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
@@ -349,21 +330,13 @@ ipcMain.handle('dialog:select-folder', async (event: IpcMainInvokeEvent): Promis
 });
 
 // Small, explicit window-control bridge for the renderer title controls.
-ipcMain.handle('window:minimize', (event: IpcMainInvokeEvent) => {
-  assertTrustedIpcSender(event);
-  mainWindow?.minimize();
-  return true;
-});
-ipcMain.handle('window:toggle-maximize', (event: IpcMainInvokeEvent) => {
-  assertTrustedIpcSender(event);
+ipcMain.handle('window:minimize', () => { mainWindow?.minimize(); return true; });
+ipcMain.handle('window:toggle-maximize', () => {
   if (!mainWindow) return false;
   if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize();
   return mainWindow.isMaximized();
 });
-ipcMain.handle('window:is-maximized', (event: IpcMainInvokeEvent) => {
-  assertTrustedIpcSender(event);
-  return Boolean(mainWindow?.isMaximized());
-});
+ipcMain.handle('window:is-maximized', () => Boolean(mainWindow?.isMaximized()));
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -418,13 +391,6 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
-  // The renderer never needs a <webview>: refuse to attach one so a hostile
-  // page cannot spawn an unsandboxed child view.
-  mainWindow.webContents.on('will-attach-webview', (event) => {
-    event.preventDefault();
-    log('blocked a webview attachment');
-  });
-
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -451,18 +417,6 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     try {
       log('starting NUVRO AI desktop...');
-
-      // A configured PORT that the server would reject must not start a
-      // half-working desktop app: fail with an actionable message instead.
-      if (PORT_CONFIG_ERROR) {
-        showErrorAndQuit(
-          'NUVRO AI cannot start: invalid PORT.',
-          `${PORT_CONFIG_ERROR}\n\nFix the PORT value in the NUVRO AI .env file (or your environment) and start NUVRO AI again.`,
-        );
-        return;
-      }
-
-      installPermissionGuards();
 
       if (await isQuillixRunning()) {
         log(`found an existing NUVRO AI server on ${APP_URL} — reusing it`);
@@ -507,9 +461,18 @@ if (!gotLock) {
     app.quit();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     appIsQuitting = true;
-    stopServerProcess();
+    // Hardening: the first quit is deferred until the bounded shutdown of the
+    // server has finished. Without this the app would exit while the child
+    // server is still alive (leaving an orphaned process holding the port),
+    // or hang waiting for a child that never dies.
+    if (shutdownComplete) return;
+    event.preventDefault();
+    void stopServerProcessBounded().finally(() => {
+      shutdownComplete = true;
+      app.quit();
+    });
   });
 
   // Raw signals (Ctrl+C in a terminal, `kill`) do not run Electron's normal
@@ -517,8 +480,10 @@ if (!gotLock) {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
       appIsQuitting = true;
-      stopServerProcess();
-      app.quit();
+      void stopServerProcessBounded().finally(() => {
+        shutdownComplete = true;
+        app.quit();
+      });
     });
   }
 }

@@ -20,7 +20,9 @@ for(const name of ['modelDefaults','providerPresets']) {
   const source=fs.readFileSync(path.join(root,'src','shared',`${name}.ts`),'utf8');
   fs.writeFileSync(path.join(tmp,'shared',`${name}.js`),stripTypeScriptTypes(source,{mode:'transform'}));
 }
-for(const name of ['sarvam','resourceGuard','brainRegistry','universal','providerStream','providerProfiles','settings','rateLimitService','promptCache']) {
+// providerKeyRotation is imported by universal.ts for multi-key failover and
+// must be present in this isolated fixture as well.
+for(const name of ['sarvam','resourceGuard','brainRegistry','universal','providerStream','providerProfiles','settings','rateLimitService','promptCache','providerKeyRotation']) {
   const source=fs.readFileSync(path.join(root,'src','server',`${name}.ts`),'utf8').replaceAll("'../shared/","'./shared/").replaceAll('"../shared/','"./shared/');
   const js=stripTypeScriptTypes(source,{mode:'transform'});
   fs.writeFileSync(path.join(tmp,`${name}.js`),js);

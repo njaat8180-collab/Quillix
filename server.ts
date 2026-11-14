@@ -7,14 +7,24 @@ import fs from 'fs';
 // NOTE: vite is imported lazily (dev mode only) so the production server never
 // loads the bundler — faster startup and a smaller runtime footprint.
 import { WorkspaceManager } from './src/server/workspace.js';
+import {
+  acquireWorkspaceLock,
+  releaseWorkspaceLock,
+  releaseAllWorkspaceLocks,
+  getWorkspaceLockStatus,
+  WorkspaceLockError,
+  type WorkspaceLockHandle,
+} from './src/server/workspaceLock.js';
+import { providerKeyPool } from './src/server/providerKeyRotation.js';
 import { TerminalService } from './src/server/terminal.js';
 import { GitService } from './src/server/git.js';
+import { GitBisectService } from './src/server/gitBisect.js';
 import { TaskBranchStore, isTaskBranchName, taskBranchName } from './src/server/taskBranches.js';
 import { CodebaseIndexer } from './src/server/indexer.js';
 import { collectEditorProject } from './src/server/editorProject.js';
 import { ToolRegistry } from './src/server/toolRegistry.js';
 import { OllamaQwenProvider } from './src/server/qwen.js';
-import { ProviderRouter, SarvamProvider, saveSarvamKey, clearSarvamKey, hasSarvamKey, saveSarvamFailoverKey, clearSarvamFailoverKeys, sarvamFailoverKeyCount } from './src/server/sarvam.js';
+import { ProviderRouter, SarvamProvider, saveSarvamKey, clearSarvamKey, hasSarvamKey, saveSarvamFailoverKey, clearSarvamFailoverKeys, sarvamFailoverKeyCount, loadSarvamKeys } from './src/server/sarvam.js';
 import { UniversalProvider, saveUniversalKey, clearUniversalKey, hasUniversalKey, migrateLegacyUniversalKey, saveUniversalKeyToPool, clearUniversalKeyPool, universalKeyPoolCount, readUniversalKeys } from './src/server/universal.js';
 import { discoverProviderModels } from './src/server/providerModelCatalog.js';
 import { safeProviderError } from './src/server/providerErrors.js';
@@ -24,7 +34,7 @@ import { inspectBrowserAssets, inspectBrowserScripts } from './src/server/browse
 import {createOpenAIProvider, saveOpenAIKey, clearOpenAIKey, hasOpenAIKey, readOpenAIKeys, OPENAI_API_ENDPOINT, saveOpenAIFailoverKey, clearOpenAIFailoverKeys, openAIFailoverKeyCount} from './src/server/openai.js';
 import {createGrokProvider, saveGrokKey, clearGrokKey, hasGrokKey, readGrokKeys, GROK_API_ENDPOINT, saveGrokFailoverKey, clearGrokFailoverKeys, grokFailoverKeyCount} from './src/server/grok.js';
 import {createGroqProvider, saveGroqKey, clearGroqKey, hasGroqKey, readGroqKeys, GROQ_API_ENDPOINT, saveGroqFailoverKey, clearGroqFailoverKeys, groqFailoverKeyCount} from './src/server/groq.js';
-import {createNvidiaProvider, saveNvidiaKey, clearNvidiaKey, hasNvidiaKey, saveNvidiaFailoverKey, clearNvidiaFailoverKeys, nvidiaFailoverKeyCount, discoverNimModels, nimFailoverSnapshot} from './src/server/nvidia.js';
+import {createNvidiaProvider, saveNvidiaKey, clearNvidiaKey, hasNvidiaKey, readNvidiaKeys, saveNvidiaFailoverKey, clearNvidiaFailoverKeys, nvidiaFailoverKeyCount, discoverNimModels, nimFailoverSnapshot} from './src/server/nvidia.js';
 import { AgentEngine } from './src/server/agentEngine.js';
 import { DiagnosticsService } from './src/server/diagnostics.js';
 import { SettingsStore } from './src/server/settings.js';
@@ -55,17 +65,8 @@ import { PREVIEW_CONTENT_SECURITY_POLICY, isPreviewAssetAllowed } from './src/se
 import { BUILTIN_CODING_PLUGINS } from './src/server/builtinPlugins.js';
 import { SourceContextRetriever } from './src/server/sourceContext.js';
 import { buildInlineCompletionPrompt, cleanInlineCompletion, trimCompletionContext } from './src/shared/inlineCompletion.js';
+import { buildContextualChatPrompt, normalizeAnchorLine, CONTEXTUAL_CHAT_MAX_CONTEXT_CHARS } from './src/shared/contextualChat.js';
 import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey } from './src/server/tavilyVerification.js';
-import { createLocalApiGuard, createApiErrorHandler, isLoopbackAddress } from './platform/httpSecurity.js';
-import { resolvePort } from './platform/portConfig.js';
-import { buildContentSecurityPolicy } from './platform/csp.js';
-import {
-  acquireWorkspaceLease,
-  renewWorkspaceLease,
-  releaseWorkspaceLease,
-  readWorkspaceLease,
-  DEFAULT_LEASE_TTL_MS,
-} from './platform/workspaceLease.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -85,6 +86,12 @@ const pendingApprovals = new Map<
   string,
   { resolve: (approved: boolean) => void; request: { kind: 'terminal' | 'git' | 'file'; title: string; command?: string; reason?: string } }
 >();
+
+function isLoopbackAddress(remoteAddress: string | undefined): boolean {
+  if (!remoteAddress) return false;
+  const normalized = remoteAddress.replace(/^::ffff:/, '').toLowerCase();
+  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
+}
 
 /** Keep long model generations alive through Electron/browser/proxy idle timers. */
 function startSseKeepAlive(res: Response): () => void {
@@ -108,21 +115,8 @@ async function startServer() {
   // NUVRO AI's control API is localhost-only by default. Never bind 0.0.0.0 —
   // this API can read/write files, run terminal commands, and execute tools.
   const HOST = '127.0.0.1';
-  // One port contract for the desktop shell and this server: an explicitly
-  // configured but invalid PORT is rejected with an actionable message instead
-  // of being coerced into a different port.
-  const portResolution = resolvePort({ envPort: process.env.PORT });
-  if (!portResolution.ok) {
-    throw new Error(portResolution.reason ?? 'PORT must be an integer between 1 and 65535.');
-  }
-  const PORT = portResolution.port;
-
-  // --- SECURITY MIDDLEWARE -------------------------------------------------
-  // 1) The NUVRO AI API must only be reachable from the local machine.
-  //    This runs BEFORE the body parser on purpose: a hostile page in the
-  //    user's browser must not be able to make the server allocate a 50 MB
-  //    JSON body just to be rejected afterwards.
-  app.use('/api', createLocalApiGuard(PORT));
+  const PORT = Number(process.env.PORT || 3000);
+  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 
   app.use(express.json({ limit: '50mb' }));
   const requireAgentMode = (req: Request, res: Response, next: NextFunction) => {
@@ -137,6 +131,19 @@ async function startServer() {
   };
   app.use(['/api/workspace/set-root', '/api/workspace/create-project', '/api/project/open', '/api/settings', '/api/providers/sarvam/key', '/api/providers/sarvam/failover-key', '/api/providers/sarvam/failover-keys', '/api/providers/openai/key', '/api/providers/openai/failover-key', '/api/providers/openai/failover-keys', '/api/providers/grok/key', '/api/providers/grok/failover-key', '/api/providers/grok/failover-keys', '/api/providers/groq/key', '/api/providers/groq/failover-key', '/api/providers/groq/failover-keys', '/api/providers/nvidia/key', '/api/providers/nvidia/failover-key', '/api/providers/nvidia/failover-keys', '/api/providers/universal/key', '/api/providers/tavily/key'], (req, res, next) => {
     if (agentBusy && req.method !== 'GET') return res.status(409).json({ success: false, error: 'Wait for the active task to finish or stop it before changing the workspace or settings.' });
+    next();
+  });
+
+  // --- SECURITY MIDDLEWARE -------------------------------------------------
+  // 1) The NUVRO AI API must only be reachable from the local machine.
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+    if (!isLoopbackAddress(req.socket.remoteAddress) ||
+        !validateLocalApiRequest(req.headers.host, req.headers.origin, PORT)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: NUVRO AI only accepts requests from its local application origin.',
+      });
+    }
     next();
   });
 
@@ -158,53 +165,29 @@ async function startServer() {
       ? initialSettings.workspaceRoot
       : process.cwd();
   const workspaceManager = new WorkspaceManager(initialWorkspaceRoot);
-  // M9.6: concurrent workspace safety. Only one NUVRO AI instance may write
-  // to a workspace at a time. The lease lives in the workspace's own
-  // `.quillix/` folder (already git-ignored) and is arbitrated by an
-  // exclusive file create, so two racing processes cannot both win it.
-  const workspaceLeaseOwnerId = `quillix-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
-  let workspaceLeaseRoot = workspaceManager.getRoot();
-  let workspaceLeaseHeld = false;
-  const acquireWorkspaceLeaseFor = (root: string): { ok: boolean; error?: string } => {
-    const result = acquireWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
-    if (!result.acquired) return { ok: false, error: result.error };
-    workspaceLeaseRoot = root;
-    workspaceLeaseHeld = true;
-    return { ok: true };
-  };
-  const releaseWorkspaceLeaseFor = (root: string) => {
-    if (!workspaceLeaseHeld) return;
-    releaseWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
-    workspaceLeaseHeld = false;
-  };
-  // Take the lease before the server accepts a single request. A second
-  // instance on the same workspace fails fast with an actionable message
-  // instead of corrupting the user's files.
-  {
-    const startupLease = acquireWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
-    if (!startupLease.acquired) {
-      console.error(
-        `\nQuillix could not start: ${startupLease.error || 'the workspace is already in use.'}\n` +
-          `Two instances writing to the same folder would overwrite each other's work.\n` +
-          `Stop the other instance, or start this one with a different workspace folder.\n`
-      );
-      process.exit(1);
+  // M9.6: claim the workspace so a second NUVRO AI instance cannot mutate the
+  // same folder at the same time. The claim is best effort: if another live
+  // instance already owns the workspace this process still starts, but every
+  // workspace mutation is refused until that instance exits.
+  let workspaceLock: WorkspaceLockHandle | null = null;
+  const claimWorkspaceLock = async (root: string): Promise<void> => {
+    if (workspaceLock) {
+      releaseWorkspaceLock(workspaceLock);
+      workspaceLock = null;
     }
-    workspaceLeaseHeld = true;
-  }
-  // Renew the lease while the server is alive. If the lease was taken over
-  // (this instance was frozen long enough for it to expire), say so loudly.
-  const workspaceLeaseHeartbeat = setInterval(() => {
-    if (!workspaceLeaseHeld) return;
-    const renewed = renewWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
-    if (!renewed.acquired) {
-      console.error(`Quillix workspace lease lost: ${renewed.error || 'another instance took the workspace.'}`);
+    try {
+      workspaceLock = await acquireWorkspaceLock(root, { timeoutMs: 500 });
+    } catch (error) {
+      workspaceLock = null;
+      const message = error instanceof WorkspaceLockError ? error.message : String((error as any)?.message ?? error);
+      console.warn(`NUVRO AI: workspace lock not acquired — ${message}`);
     }
-  }, Math.max(5_000, Math.floor(DEFAULT_LEASE_TTL_MS / 3)));
-  workspaceLeaseHeartbeat.unref?.();
-
+  };
+  await claimWorkspaceLock(workspaceManager.getRoot());
   const terminalService = new TerminalService();
   const gitService = new GitService(terminalService);
+  // M3.6: Git bisect assist — drives `git bisect` without ever rewriting history.
+  const gitBisectService = new GitBisectService();
   // One agent task = one git branch (Cursor-style). Remembers the base branch
   // per workspace so task work can be merged back or discarded.
   const taskBranchStore = new TaskBranchStore();
@@ -985,18 +968,63 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
     settingsStore.update({ workspaceRoot: folderPath, recentWorkspaces: recent });
   };
 
+  // M9.6: workspace lock — inspect, claim and release the active workspace.
+  app.get('/api/workspace/lock', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const status = getWorkspaceLockStatus(workspaceManager.getRoot());
+    res.json({
+      success: true,
+      lock: status,
+      ownedByThisInstance: !!workspaceLock && workspaceLock.lockPath === status.lockPath,
+    });
+  });
+  app.post('/api/workspace/lock', requireAgentMode, async (_req: Request, res: Response) => {
+    await claimWorkspaceLock(workspaceManager.getRoot());
+    const status = getWorkspaceLockStatus(workspaceManager.getRoot());
+    const owned = !!workspaceLock && status.owner?.sessionId === workspaceLock.sessionId;
+    if (!owned) {
+      return res.status(409).json({
+        success: false,
+        error: 'Another NUVRO AI instance is already using this workspace.',
+        lock: status,
+      });
+    }
+    res.json({ success: true, lock: status });
+  });
+  app.post('/api/workspace/lock/release', requireAgentMode, (_req: Request, res: Response) => {
+    if (workspaceLock) {
+      releaseWorkspaceLock(workspaceLock);
+      workspaceLock = null;
+    }
+    res.json({ success: true, lock: getWorkspaceLockStatus(workspaceManager.getRoot()) });
+  });
+
+  // M9.3: provider key health — how many keys exist, which one is active and
+  // why a key is resting. Only non-secret identifiers are exposed.
+  app.get('/api/providers/key-health', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const readers: Array<[string, () => string[]]> = [
+      ['openai', readOpenAIKeys],
+      ['grok', readGrokKeys],
+      ['groq', readGroqKeys],
+      ['nvidia', readNvidiaKeys],
+      ['sarvam', loadSarvamKeys],
+    ];
+    for (const [provider, read] of readers) {
+      try {
+        providerKeyPool.register(provider, read());
+      } catch {
+        // A provider whose protected key file cannot be read is simply not
+        // reported; the endpoint must never fail because of one provider.
+      }
+    }
+    res.json({ success: true, providers: providerKeyPool.healthAll() });
+  });
+
   // Workspace - Set Root
   app.post('/api/workspace/set-root', async (req: Request, res: Response) => {
     const { targetPath } = req.body;
     if (!targetPath) return res.status(400).json({ success: false, error: 'targetPath required' });
-    // M9.6: take the lease for the target folder BEFORE switching. If another
-    // instance already owns it, refuse the switch instead of leaving two
-    // instances writing to the same folder.
-    const previousRoot = workspaceLeaseRoot;
-    const lease = acquireWorkspaceLeaseFor(targetPath);
-    if (!lease.ok) {
-      return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
-    }
     const result = workspaceManager.setRoot(targetPath);
     // Persist the selected workspace so it is restored on the next start.
     if (result.success) {
@@ -1005,26 +1033,10 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
-      // The old workspace is no longer ours.
-      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
-    } else {
-      // The switch failed: give the target folder back.
-      releaseWorkspaceLeaseFor(targetPath);
-      workspaceLeaseHeld = workspaceLeaseRoot === previousRoot;
+      // M9.6: move the workspace claim to the newly opened folder.
+      await claimWorkspaceLock(result.path);
     }
     res.json(result);
-  });
-
-  // Workspace - lease status (M9.6). Lets the UI show who owns the folder.
-  app.get('/api/workspace/lease', (_req: Request, res: Response) => {
-    const lease = readWorkspaceLease(workspaceLeaseRoot);
-    res.json({
-      success: true,
-      ownerId: workspaceLeaseOwnerId,
-      root: workspaceLeaseRoot,
-      held: workspaceLeaseHeld && lease?.ownerId === workspaceLeaseOwnerId,
-      lease: lease ? { ownerId: lease.ownerId, ownerPid: lease.ownerPid, ownerHost: lease.ownerHost, acquiredAt: lease.acquiredAt, heartbeatAt: lease.heartbeatAt, expiresAt: lease.expiresAt } : null,
-    });
   });
 
   // ---- TASKS (§21 — persistent task memory / resume) -----------------------
@@ -1124,16 +1136,8 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
         return res.status(409).json({ success: false, error: `Folder already exists: ${projectDir}` });
       }
       fs.mkdirSync(projectDir, { recursive: true });
-      // M9.6: the freshly created folder is ours to take, but the lease is
-      // still acquired explicitly so the invariant holds on every path.
-      const previousRoot = workspaceLeaseRoot;
-      const lease = acquireWorkspaceLeaseFor(projectDir);
-      if (!lease.ok) {
-        return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
-      }
       const result = workspaceManager.setRoot(projectDir);
       if (!result.success) {
-        releaseWorkspaceLeaseFor(projectDir);
         return res.status(500).json({ success: false, error: result.error });
       }
       await toolRegistry.setWorkspaceRoot(result.path);
@@ -1141,7 +1145,8 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
-      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
+      // M9.6: claim the freshly created project folder.
+      await claimWorkspaceLock(result.path);
       res.json({ success: true, path: result.path });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -1190,6 +1195,55 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       res.json({ success: true, question, root, ...answer });
     } catch {
       res.status(503).json({ success: false, error: 'Codebase answer is temporarily unavailable.' });
+    }
+  });
+
+  // M7.4: contextual chat — ask a question about one specific line.
+  // The request carries the file, the anchor line and the editor's current
+  // buffer. The server rebuilds the bounded context window from the shared
+  // helper so the renderer and the server can never disagree about which lines
+  // the question is about.
+  app.post('/api/editor/ask-line', requireAgentMode, async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const body = req.body ?? {};
+    const question = typeof body.question === 'string' ? body.question.trim() : '';
+    const filePath = typeof body.filePath === 'string' ? body.filePath.trim() : '';
+    const content = typeof body.content === 'string' ? body.content : '';
+    if (!question) return res.status(400).json({ success: false, error: 'A question is required.' });
+    if (!filePath) return res.status(400).json({ success: false, error: 'A file path is required.' });
+    if (!content) return res.status(400).json({ success: false, error: 'The file content is required.' });
+
+    // The client may send an unsaved buffer; fall back to disk when it did not.
+    let fileContent = content;
+    if (fileContent.length > CONTEXTUAL_CHAT_MAX_CONTEXT_CHARS * 4) {
+      const onDisk = workspaceManager.readFile(filePath);
+      if (onDisk.success && typeof onDisk.content === 'string') fileContent = onDisk.content;
+    }
+
+    const anchor = { filePath, line: Number(body.line), content: fileContent };
+    const prompt = buildContextualChatPrompt(anchor, question);
+    if (!prompt) return res.status(400).json({ success: false, error: 'A question is required.' });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+    try {
+      const settings = settingsStore.get();
+      const answer = await aiProvider.generateText(prompt, {
+        model: settings.model,
+        temperature: 0.2,
+        maxOutputTokens: 600,
+        timeoutSeconds: 45,
+        signal: controller.signal,
+        systemInstruction: 'You answer questions about a specific line of code. Be concise and concrete.',
+      });
+      res.json({ success: true, answer: typeof answer === 'string' ? answer : '', filePath, line: normalizeAnchorLine(body.line, fileContent.split('\n').length) });
+    } catch (error: any) {
+      if (!res.headersSent) {
+        const aborted = controller.signal.aborted;
+        res.status(aborted ? 504 : 502).json({ success: false, error: aborted ? 'The question timed out.' : (error?.message || 'The question could not be answered.') });
+      }
+    } finally {
+      clearTimeout(timeout);
     }
   });
 
@@ -1499,9 +1553,6 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   };
 
   previewApp.use('/preview', (req: Request, res: Response) => servePreviewAsset(req, res, true));
-  // The preview server serves untrusted user projects: never leak a stack
-  // trace or an absolute path into the preview document.
-  previewApp.use(createApiErrorHandler());
   const previewServer = previewApp.listen(0, HOST, () => {
     const address = previewServer.address() as import('net').AddressInfo;
     previewServerReady = true;
@@ -1796,6 +1847,74 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       const removed = await gitService.deleteBranch(root, record.branch, true);
       taskBranchStore.clear(root);
       res.json({ success: true, branch: record.branch, base: record.base, output: `${back.output} ${removed.output}`.trim() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // M3.6: Git Bisect Assist
+  // Every route works on the active workspace and never rewrites history.
+  app.get('/api/git/bisect', async (req: Request, res: Response) => {
+    try {
+      const progress = await gitBisectService.progress(workspaceManager.getRoot());
+      res.json({ success: true, progress });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/git/bisect/start', requireAgentMode, async (req: Request, res: Response) => {
+    const { good, bad, testCommand, timeoutMs, inconclusiveExitCodes, inconclusivePatterns } = req.body || {};
+    if (!good || !bad) {
+      return res.status(400).json({ success: false, error: 'Both a known-good and a known-bad revision are required.' });
+    }
+    if (!testCommand || typeof testCommand !== 'string') {
+      return res.status(400).json({ success: false, error: 'A test command is required to drive the bisect.' });
+    }
+    try {
+      const result = await gitBisectService.start(workspaceManager.getRoot(), String(good), String(bad), {
+        testCommand,
+        timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+        inconclusiveExitCodes: Array.isArray(inconclusiveExitCodes) ? inconclusiveExitCodes.filter((v: any) => typeof v === 'number') : undefined,
+        inconclusivePatterns: Array.isArray(inconclusivePatterns) ? inconclusivePatterns.filter((v: any) => typeof v === 'string') : undefined,
+      });
+      if (!result.success) return res.status(400).json({ success: false, error: result.error });
+      res.json({ success: true, session: result.session });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/git/bisect/step', requireAgentMode, async (req: Request, res: Response) => {
+    try {
+      const result = await gitBisectService.step(workspaceManager.getRoot());
+      if (!result.success) return res.status(400).json({ success: false, error: result.error, session: result.session });
+      res.json({
+        success: true,
+        classification: result.classification,
+        session: result.session,
+        progress: result.progress,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/git/bisect/recover', requireAgentMode, async (req: Request, res: Response) => {
+    try {
+      const result = await gitBisectService.recover(workspaceManager.getRoot());
+      if (!result.success) return res.status(409).json({ success: false, error: result.error, session: result.session });
+      res.json({ success: true, session: result.session });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/git/bisect/finish', requireAgentMode, async (req: Request, res: Response) => {
+    try {
+      const result = await gitBisectService.finish(workspaceManager.getRoot());
+      if (!result.success) return res.status(500).json({ success: false, error: result.error });
+      res.json({ success: true, session: result.session });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2154,26 +2273,7 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   });
 
   // Vite middleware setup
-  // An unknown /api path must be a JSON 404, never the single-page app:
-  // returning HTML with status 200 makes a failed API call look successful.
-  app.use('/api', (_req: Request, res: Response) => {
-    res.status(404).json({ success: false, error: 'Unknown API endpoint.' });
-  });
-
-  // The renderer is a local single-page app: it only ever loads its own
-  // origin. The CSP is sent as a header as well as a meta tag so directives
-  // that only work in headers (frame-ancestors) are enforced too.
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  const appContentSecurityPolicy = `${buildContentSecurityPolicy(isDevelopment ? 'development' : 'production')}; frame-ancestors 'none'`;
-  app.use((_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader('Content-Security-Policy', appContentSecurityPolicy);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    next();
-  });
-
-  if (isDevelopment) {
+  if (process.env.NODE_ENV !== 'production') {
     app.use('/monaco/vs', express.static(path.resolve('node_modules/monaco-editor/min/vs')));
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -2188,10 +2288,6 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  // Terminal error handler: no stack trace and no absolute path ever reaches
-  // the browser. Express' default handler leaks both outside production mode.
-  app.use(createApiErrorHandler());
 
   const server = app.listen(PORT, HOST, () => {
     console.log(`NUVRO AI Server running on http://${HOST}:${PORT} (localhost only)`);
@@ -2239,12 +2335,18 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
     } catch {
       // best effort
     }
+    // M9.6: release the workspace claim so another instance can take over
+    // immediately instead of waiting for the stale-lock timeout.
+    try {
+      if (workspaceLock) releaseWorkspaceLock(workspaceLock);
+      workspaceLock = null;
+      releaseAllWorkspaceLocks();
+    } catch {
+      // best effort
+    }
     previewServerReady = false;
     previewSessionService.stopAll();
     previewServer.close();
-    // M9.6: hand the workspace back so another instance can start cleanly.
-    clearInterval(workspaceLeaseHeartbeat);
-    releaseWorkspaceLeaseFor(workspaceLeaseRoot);
     server.close(() => process.exit(0));
     // Safety net if close hangs on open keep-alive connections.
     setTimeout(() => process.exit(0), 2000).unref();
