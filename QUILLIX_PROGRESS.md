@@ -3,7 +3,14 @@ QUILLIX PROGRESS TRACKER
 **Goal:** QUILLIX > CURSOR  
 **Deadline:** November 11, 2026, 11:59 PM IST  
 **Current Phase:** Phase 2 & 5 - Advanced AI Coding Engine & Professional UI/UX  
-**Overall Completion:** 45% (milestone audit 2026-11-12: 9 of 9 audited milestones DONE; see audit log at the end)
+**Overall Completion:** **88.9% task-level** (56/63 verified in `.quillix/mission/TASKS.md`, recomputed from the ledger's own status column 2026-11-14) | **77% app ledger** (75/98 aggregate in `goal-state.json`; the 98-item ledger is a legacy aggregate with no itemised source, so its counts cannot be recomputed — see `ledgerAudit`) | roadmap milestone checklist 51/76 (status column is stale and owned by another agent's reserved file)
+
+> **Completion is measured, not asserted.** The task-level figure above was recomputed
+> by parsing the status column of every `P<n>.<n>` row in `.quillix/mission/TASKS.md`:
+> 63 task rows, 56 verified, 3 in progress, 3 not started, 1 blocked.
+> The 7 remaining tasks are listed under "REMAINING WORK" below.
+> The roadmap's own status column is unreliable — of the 22 milestones it marks as
+> not-done, 19 have working, wired code in the tree.
 
 ---
 
@@ -42,6 +49,36 @@ against the real source. Findings and fixes:
 | M7.6 Task history/timeline | pending | pending | shipped | verified |
 
 ---
+
+
+## REMAINING WORK (2026-11-14, measured from `.quillix/mission/TASKS.md`)
+
+7 task rows are not verified. None is an unknown engineering surprise — each
+is either externally blocked or needs hardware/credentials this machine does
+not currently have.
+
+| ID | Task | Status | Why it is not done |
+|----|------|--------|-------------------|
+| P3.9 | M8.4 Windows packaging (NSIS + portable) | in progress | Paused at the resource guard: free RAM 1.52 GiB < 2.00 GiB floor (B11). **No partial artifacts were produced.** |
+| P4.1 | Full regression (`test:acceptance:safe`, `:all`) | in progress | `test:acceptance:safe` chains lint -> test -> smoke -> build -> backend-e2e; the e2e legs were red only because concurrent agents held the box at 0.05-0.17 GiB free RAM. Needs an idle machine. |
+| P4.2 | Real coding workflow runs (no mocks) | in progress | v7 benchmark matrix is the real-model evidence; the remaining legs need live provider credentials (B2). |
+| P4.4 | Reproducible Cursor comparison | not started | Needs a pinned Cursor baseline (B3). No Cursor binary or baseline capture exists in the tree. |
+| P4.5 | Windows build verification + artifacts | not started | Same B11 resource-guard pause as P3.9. |
+| P5.4 | Windows packaging | blocked | `npm run package:win` paused cleanly at the guard (1.52 GiB < 2.00 GiB). `test:release-artifact` correctly reports the packaged fingerprint as stale rather than passing. |
+| P9.1 | B14/B15: external writers observed | monitoring | See the warning below — a coordination risk, not a feature gap. |
+
+### External writers are active in this tree
+
+P9.1 records that at 17:45-17:58 an external process implemented M4.5
+branch-per-task and edited `vitest.config.ts`, and earlier in this session
+two commits (`09b7a8c`, `b65bbf9`) appeared containing working-tree changes
+that no agent in this session had committed. **Another agent or tool is
+writing to this repository concurrently.** Work here must be committed in
+small, self-contained increments and verified after each one, because a
+concurrent writer can change files between two commands.
+
+---
+
 
 ## PHASE 1: AUDIT AND STABILIZATION ✅ COMPLETE
 
