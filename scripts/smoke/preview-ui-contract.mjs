@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const source = fs.readFileSync(path.join(root, 'src', 'components', 'EditorArea.tsx'), 'utf8');
+const runner = fs.readFileSync(path.join(root, 'src', 'components', 'ProjectRunner.tsx'), 'utf8');
+const preview = fs.readFileSync(path.join(root, 'src', 'components', 'PreviewPane.tsx'), 'utf8');
+assert.match(source, /\{onOpenPreview && !readOnly && <button/);
+assert.match(source, /fallbackPreviewInfo/);
+assert.match(source, /effectivePreviewInfo/);
+assert.match(source, /snapshot\?\.files\.find/);
+assert.doesNotMatch(source, /disabled=\{!previewInfo\}/);
+assert.match(source, /Open \$\{effectivePreviewInfo\.title\} preview/);
+assert.match(runner, /onPreviewAvailabilityChange\?\.\(null\)/);
+assert.doesNotMatch(runner, /onPreviewAvailabilityChange\?\.\(\{ root: '', entry: 'index\.html'/);
+assert.match(preview, /missingEntryRetries/);
+assert.match(preview, /Waiting for \$\{entry\} to be created/);
+assert.match(preview, /startPreviewRef\.current\(false\)/);
+console.log(JSON.stringify({ status: 'PASS', files: ['src/components/EditorArea.tsx', 'src/components/ProjectRunner.tsx', 'src/components/PreviewPane.tsx'], checks: 10 }));

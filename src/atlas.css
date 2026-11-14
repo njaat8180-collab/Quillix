@@ -1,0 +1,149 @@
+/* ATLAS — QUILLIX's local, code-native visual system. No external assets. */
+:root,.theme-dark {
+  --bg:#141714; --surface:#1b1e1a; --surface-secondary:#232720; --border:#33382e;
+  --text:#eeeedd; --text-muted:#9da592; --accent:#d4f577; --accent-secondary:#b9d871;
+  --accent-soft:#d4f57710; --accent-ink:#1a2311; --input:#151913; --composer-bg:#20251b;
+  --success:#b7d88b; --warning:#e0bd7d; --danger:#ef9b8b; --hover:#d5e5aa09;
+  --shadow:0 12px 36px #0002; --q-glow:transparent; --atlas-paper:#e8e7d9; --atlas-paper-ink:#2b3026;
+}
+.theme-gray {
+  --bg:#22241f; --surface:#292c25; --surface-secondary:#32362b; --border:#414637;
+  --text:#eeeee0; --text-muted:#acb39f; --accent:#d5e99d; --accent-secondary:#bfd087;
+  --accent-soft:#d5e99d12; --accent-ink:#222a14; --input:#24271f; --composer-bg:#292e22;
+  --success:#b9d597; --warning:#e0bf82; --danger:#efa28c; --hover:#e5f8c008; --q-glow:transparent;
+  --atlas-paper:#e8e7d9; --atlas-paper-ink:#2b3026;
+}
+.theme-light {
+  --bg:#f3f3e9; --surface:#fbfbf3; --surface-secondary:#eaeedf; --border:#d9ddce;
+  --text:#2d3626; --text-muted:#68735d; --accent:#416323; --accent-secondary:#648344;
+  --accent-soft:#4163230c; --accent-ink:#fbffef; --input:#fafbf4; --composer-bg:#fffef7;
+  --success:#46702f; --warning:#8d661e; --danger:#b34a38; --hover:#41632308;
+  --shadow:0 12px 36px #29361a08; --q-glow:transparent; --atlas-paper:#e2e8cc; --atlas-paper-ink:#2b3026;
+}
+.theme-gradient {
+  --bg:#141d1a; --surface:#1b2721; --surface-secondary:#253329; --border:#36483a;
+  --text:#e7efdf; --text-muted:#99b09c; --accent:#c0efb6; --accent-secondary:#91c4a9;
+  --accent-soft:#c0efb60e; --accent-ink:#1c3322; --input:#15231c; --composer-bg:#213025;
+  --success:#a7dfac; --warning:#e0c790; --danger:#e7a49a; --hover:#b6dfc109;
+  --shadow:0 12px 36px #0002; --q-glow:transparent; --atlas-paper:#dfebdb; --atlas-paper-ink:#243a2b;
+}
+body { font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; }
+::selection { color:var(--accent-ink); background:var(--accent); }
+button,input,textarea,select { -webkit-tap-highlight-color:transparent; }
+button { touch-action:manipulation; }
+button[style*="background: var(--accent)"],button[style*="background-color: var(--accent)"] { color:var(--accent-ink)!important; }
+.q-topbar { padding:0 28px; background:var(--bg); gap:20px; }
+.q-brand-mark { width:35px; height:38px; color:var(--accent); background:transparent; }
+.q-atlas-wordmark { font-size:24px; font-weight:650; letter-spacing:-1.6px; line-height:1; }
+.q-atlas-wordmark>span { font-size:13px; color:var(--accent); margin-left:4px; vertical-align:top; }
+.q-atlas-brand-caption { font:7px/1.7 ui-monospace,Consolas,monospace; letter-spacing:1.25px; margin-top:5px; color:var(--text-muted); }
+.q-topbar nav { height:100%; padding:0; gap:12px; }
+.q-topbar .q-nav-item { height:100%; padding:0 13px; border-radius:0; border-bottom:2px solid transparent; font-size:11px; font-weight:500; gap:8px; }
+.q-topbar .q-nav-item[aria-current="page"] { background:transparent; color:var(--text); border-bottom-color:var(--accent); }
+.q-atlas-nav-no { font:9px ui-monospace,monospace; color:var(--text-muted); opacity:.55; }
+.q-topbar .q-nav-item[aria-current="page"] .q-atlas-nav-no { color:var(--accent); opacity:1; }
+.q-topbar .q-nav-item svg { display:none; }
+.q-topbar>div:last-child>span { border:0; padding:5px; font-size:9px; }
+.q-atlas-home { flex:1; min-height:0; overflow:auto; background:var(--bg); }
+.q-atlas-page { width:min(100%, 1360px); max-width:1360px; padding:32px clamp(28px,4.2vw,64px) 36px; margin:0 auto; }
+.q-atlas-coordinate { display:flex; align-items:center; justify-content:space-between; gap:16px; color:var(--text-muted); font:8px/1.5 ui-monospace,monospace; letter-spacing:1.5px; padding-bottom:26px; }
+.q-atlas-coordinate>span:first-child { display:flex; align-items:center; gap:10px; }
+.q-atlas-coordinate i { display:block; width:5px; height:5px; background:var(--accent); }
+.q-atlas-home-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,340px); gap:clamp(44px,6vw,88px); align-items:start; }
+.q-atlas-main { min-width:0; }
+.q-atlas-control { padding-top:0; min-width:0; }
+.q-atlas-kicker { font:8px/1.5 ui-monospace,monospace; letter-spacing:1.7px; color:var(--text-muted); margin:16px 0 16px; }
+.q-atlas-intro h1 { font-size:clamp(42px,5.2vw,72px); font-weight:480; line-height:1.03; letter-spacing:-4px; }
+.q-atlas-intro h1 em { font-family:Georgia,"Times New Roman",serif; font-weight:400; color:var(--accent); letter-spacing:-3px; }
+.q-atlas-period { display:inline-block; color:var(--accent); font-size:40px; vertical-align:top; margin:6px 0 0 13px; font-weight:300; }
+.q-atlas-intro>p { margin:20px 0 27px; font-size:12px; line-height:1.9; color:var(--text-muted); }
+.q-atlas-launch { border:1px solid var(--border); border-radius:10px; background:var(--surface); padding:17px 20px 12px; box-shadow:0 5px 0 -3px var(--bg),0 6px 0 -3px var(--border); transition:border-color .15s; }
+.q-atlas-launch:focus-within { border-color:var(--accent); }
+.q-atlas-launch-label { display:flex; align-items:center; gap:9px; font:8px ui-monospace,monospace; letter-spacing:1.2px; color:var(--text-muted); }
+.q-atlas-launch-label>svg { color:var(--accent); }
+.q-atlas-editable { margin-left:auto; font-family:Georgia,serif; font-style:italic; font-size:11px; letter-spacing:0; }
+.q-atlas-launch textarea { display:block; width:100%; background:transparent; color:var(--text); border:0; outline:none; resize:vertical; min-height:83px; max-height:220px; padding:19px 0 8px; font-size:18px; letter-spacing:-.4px; line-height:1.6; }
+.q-atlas-launch textarea::placeholder { color:var(--text-muted); opacity:.8; }
+.q-atlas-launch-bottom { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.q-atlas-launch-bottom>span { display:flex; align-items:center; gap:7px; color:var(--text-muted); font:9px ui-monospace,monospace; }
+.q-atlas-fineprint { font:9px "Segoe UI",sans-serif; margin-left:6px; }
+.q-atlas-launch-bottom>button { display:grid; place-items:center; width:35px; height:35px; border-radius:50%; background:var(--accent); color:var(--accent-ink); transition:transform .15s; }
+.q-atlas-launch-bottom>button:hover:not(:disabled) { transform:rotate(8deg); }.q-atlas-launch-bottom>button:disabled { opacity:.25; }
+.q-atlas-recipes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin:23px 0 38px; }
+.q-atlas-recipes>button { position:relative; display:flex; align-items:center; gap:10px; min-width:0; text-align:left; padding:12px; border-right:1px solid var(--border); }
+.q-atlas-recipes>button:first-child { padding-left:0; }.q-atlas-recipes>button:last-child { border:0; padding-right:0; }
+.q-atlas-recipe-no { display:none; }.q-atlas-recipes>button>svg:first-of-type { color:var(--text-muted); flex-shrink:0; }
+.q-atlas-recipes>button>svg:last-child { margin-left:auto; flex-shrink:0; color:var(--accent); opacity:0; }
+.q-atlas-recipes>button:hover>svg:last-child { opacity:1; }.q-atlas-recipes strong { font-size:11px; font-weight:550; display:block; }
+.q-atlas-recipes small { display:block; margin-top:4px; color:var(--text-muted); font-size:9px; white-space:nowrap; }
+.q-atlas-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+.q-atlas-section-head h2 { font-size:17px; letter-spacing:-.5px; font-weight:500; }
+.q-atlas-section-head>button { display:flex; align-items:center; gap:5px; color:var(--text-muted); font-size:10px; }
+.q-atlas-section-head>button:hover { color:var(--accent); }
+.q-atlas-project-list { border-top:1px solid var(--border); }
+.q-atlas-project-list>button { display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:15px 0; border-bottom:1px solid var(--border); box-shadow:none; }
+.q-atlas-project-list>button:hover { background:var(--hover); }.q-atlas-project-list>button>svg { color:var(--text-muted); flex-shrink:0; }
+.q-atlas-project-number { color:var(--text-muted); font:9px ui-monospace,monospace; opacity:.6; }
+.q-atlas-project-list>button>span:nth-of-type(2) { flex:1; min-width:0; }
+.q-atlas-project-list strong { font-size:12px; font-weight:550; }.q-atlas-project-list small { display:block; font:9px/1.5 ui-monospace,monospace; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:4px; }
+.q-atlas-current { font:7px ui-monospace,monospace; letter-spacing:1px; color:var(--accent); border:1px solid var(--border); padding:4px 5px; border-radius:3px; }
+.q-atlas-empty-projects { display:flex; align-items:center; gap:15px; border:1px dashed var(--border); border-radius:8px; padding:22px 18px; color:var(--text-muted); }
+.q-atlas-empty-projects strong { font-size:12px; font-weight:500; color:var(--text); }.q-atlas-empty-projects p { font-size:10px; line-height:1.8; margin-top:5px; }.q-atlas-empty-projects>button { margin-left:auto; }
+.q-atlas-control { padding-top:10px; min-width:0; }
+.q-atlas-workspace-card { position:relative; background:var(--atlas-paper); color:var(--atlas-paper-ink); border-radius:8px; padding:22px; overflow:hidden; }
+.q-atlas-paper-top { display:flex; align-items:center; justify-content:space-between; font:8px ui-monospace,monospace; letter-spacing:1.5px; }
+.q-atlas-folder-art { height:115px; display:flex; align-items:center; gap:18px; opacity:.7; }.q-atlas-folder-art>span { font:italic 67px Georgia,serif; letter-spacing:-9px; opacity:.24; transform:rotate(-9deg); }
+.q-atlas-paper-index { font:7px ui-monospace,monospace; letter-spacing:1px; opacity:.6; }.q-atlas-workspace-card h2 { font-size:27px; font-weight:500; letter-spacing:-1px; line-height:1.2; margin:12px 0; overflow-wrap:anywhere; }
+.q-atlas-workspace-card>p { font:9px/1.9 ui-monospace,monospace; opacity:.65; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.q-atlas-workspace-card>button:not(.q-atlas-new-project) { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; background:var(--atlas-paper-ink); color:var(--atlas-paper); padding:11px 13px; border-radius:5px; font-size:11px; margin-top:24px; }
+.q-atlas-new-project { display:flex; align-items:center; justify-content:center; gap:6px; font-size:9px; width:100%; opacity:.7; margin-top:13px; }
+.q-atlas-engine-card { padding:25px 0 22px; border-bottom:1px solid var(--border); }.q-atlas-engine-card .q-atlas-section-head>span,.q-atlas-trace .q-atlas-section-head>span:first-child { font:8px ui-monospace,monospace; letter-spacing:1.4px; color:var(--text-muted); }
+.q-atlas-engine-name { display:flex; align-items:center; gap:9px; margin:20px 0 9px; }.q-atlas-engine-name>svg { color:var(--accent); }.q-atlas-engine-name>strong { font-size:14px; font-weight:550; }.q-atlas-engine-name>span { margin-left:auto; font:7px ui-monospace,monospace; color:var(--text-muted); border:1px solid var(--border); border-radius:3px; padding:4px 6px; }
+.q-atlas-engine-card>code { display:block; color:var(--text-muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.q-atlas-engine-state { display:flex; align-items:center; gap:7px; color:var(--warning); font-size:9px; margin-top:16px; }.q-atlas-engine-state>i { width:5px; height:5px; border-radius:50%; background:currentColor; }.q-atlas-connected { color:var(--success); }
+.q-atlas-engine-foot { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:9px; color:var(--text-muted); margin-top:20px; }.q-atlas-engine-foot>span { display:flex; align-items:center; gap:5px; }
+.q-atlas-trace { padding-top:23px; }.q-atlas-trace-line { display:block; flex:1; max-width:35px; height:1px; background:var(--border); }.q-atlas-trace>p { font-family:Georgia,serif; font-size:13px; font-style:italic; line-height:1.9; color:var(--text-muted); margin-top:20px; }
+.q-atlas-trace-item { display:flex; gap:8px; align-items:flex-start; font-size:10px; line-height:1.7; color:var(--text-muted); margin-top:12px; }.q-atlas-trace-item svg { flex-shrink:0; margin-top:3px; }.q-atlas-trace-error { color:var(--danger); }
+.q-atlas-connections { margin-top:35px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }.q-atlas-connections>summary { display:flex; justify-content:space-between; cursor:pointer; padding:17px 0; font-size:10px; color:var(--text-muted); list-style:none; }.q-atlas-connections>summary>span { display:flex; gap:9px; align-items:center; }.q-atlas-connections .q-card-enter { animation:none; }.q-atlas-connections>section { margin-top:0; }
+.q-atlas-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:20px; color:var(--text-muted); opacity:.65; font:7px ui-monospace,monospace; letter-spacing:1.2px; }.q-atlas-footer>span:first-child { display:flex; align-items:center; gap:8px; }
+/* A quieter, continuous surface for the coding studio. */
+.q-workbench-toolbar { height:45px; background:var(--bg); padding:0 20px; }.q-command-trigger { border-radius:5px; background:var(--surface); color:var(--text-muted); font-size:10px; }.q-command-trigger:focus-visible { outline-offset:1px; }
+.q-workbench-breadcrumb { font-size:10px; }.q-workbench-breadcrumb>svg:first-child { color:var(--accent); }.q-workbench-status { background:var(--bg); height:26px; font:9px ui-monospace,monospace; }
+.q-agent-divider { width:1px; position:relative; }.q-agent-divider::after { content:""; position:absolute; inset:0 -3px; }.q-agent-divider:hover { background:var(--accent); }
+.q-editor-empty { background-image:radial-gradient(var(--border) .65px,transparent .65px); background-size:21px 21px; }.q-editor-emblem { width:auto; height:auto; transform:none; border:0; background:none; color:var(--accent); margin-bottom:25px; }
+.q-editor-kicker { font:8px ui-monospace,monospace; letter-spacing:1.4px; }.q-editor-empty h2 { font-size:clamp(30px,3.2vw,49px); font-weight:450; letter-spacing:-1.8px; line-height:1.08; }.q-editor-empty h2 em { font:italic 1em/1.2 Georgia,serif; color:var(--accent); letter-spacing:-1px; }.q-editor-empty>p { font-size:11px; line-height:1.9; margin-top:14px; max-width:330px; margin-bottom:0; }
+.q-atlas-editor-start { display:flex; align-items:center; gap:9px; color:var(--accent-ink); background:var(--accent); padding:9px 13px; border-radius:5px; font-size:10px; margin:22px 0 27px; }.q-atlas-editor-start>span { margin-left:10px; }.q-shortcut-row { font-size:9px; padding:3px 0; gap:25px; }.q-shortcut-row kbd { font-size:8px; min-width:65px; }
+.q-project-sidebar>div:first-child { padding:16px 12px; }.q-project-sidebar>div:first-child>div:first-child { font:9px ui-monospace,monospace; letter-spacing:.9px; }.q-project-sidebar { width:220px; }
+.q-studio-chat .q-chat-header { padding:12px 16px; min-height:46px; }.q-studio-chat .q-chat-header>span { font-size:12px; }.q-studio-chat .q-chat-header>div { font-size:9px; }
+.q-agent-welcome { padding:29px 24px 20px; }.q-agent-welcome-icon { width:48px; height:48px; border-radius:0; background:transparent; border:0; justify-content:start; margin-bottom:25px; }
+.q-atlas-agent-kicker { color:var(--text-muted); display:block; font:7px/1.6 ui-monospace,monospace; letter-spacing:1.2px; margin-bottom:12px; }.q-agent-welcome h2 { font-size:28px; font-weight:450; letter-spacing:-1px; line-height:1.1; }.q-agent-welcome h2 em { font-family:Georgia,serif; font-weight:400; color:var(--accent); }.q-agent-welcome>p { font-size:11px; margin-top:16px; line-height:1.9; }
+.q-agent-suggestions { display:grid; width:100%; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:23px; border-top:1px solid var(--border); }.q-agent-suggestions>button { display:flex; min-width:0; flex-direction:column; align-items:flex-start; gap:7px; padding:12px 8px; border:0; border-right:1px solid var(--border); border-radius:0; font-size:10px; line-height:1.5; text-align:left; }.q-agent-suggestions>button:last-child { border-right:0; }.q-agent-suggestions>button span { overflow-wrap:anywhere; }.q-agent-suggestions>button>svg:first-child { color:var(--text-muted); }.q-agent-suggestions>button>svg:last-child { color:var(--accent); }.q-agent-suggestions>button:hover { background:var(--hover); }.q-agent-welcome-note { font:italic 11px/1.8 Georgia,serif; margin-top:24px; }
+.q-studio-chat .q-agent-suggestions { grid-template-columns:1fr; gap:0; }.q-studio-chat .q-agent-suggestions>button { flex-direction:row; align-items:center; padding:10px 2px; border-right:0; border-bottom:1px solid var(--border); }.q-studio-chat .q-agent-suggestions>button span { flex:1; }
+.q-chat-header { min-width:0; }.q-chat-brand { flex:0 0 auto; }.q-chat-provider { min-width:0; flex:1 1 160px; overflow:hidden; }.q-chat-provider-status,.q-chat-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.q-chat-model { flex:0 1 auto; }.q-chat-history-wrap { flex:0 1 auto; min-width:0; max-width:100%; margin-left:auto; }.q-chat-history-trigger { max-width:min(240px,38vw); }.q-chat-history-trigger>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.q-studio-chat .q-composer { border-radius:8px; background:var(--composer-bg); }.q-studio-chat .q-composer textarea { min-height:82px; padding:15px; font-size:12px; line-height:1.8; }.q-composer [role="tab"] { color:var(--text-muted); }.q-composer [role="tab"][aria-selected="true"] { color:var(--accent-ink); }.q-composer button[aria-label="Send message"] { color:var(--accent-ink); border-radius:5px; }.q-studio-chat .q-composer~p { font-size:8px; line-height:1.7; }.q-composer:focus-within { box-shadow:none!important; }
+.q-palette { border-radius:9px; }.q-palette-backdrop { backdrop-filter:blur(3px); }.q-palette-input input { font-size:13px; }
+.q-plugin-card { border-radius:7px; background:var(--surface); }.q-plugin-icon { border-radius:5px; }.q-plugin-switch[aria-checked="true"]>span { background:var(--accent-ink); }.q-plugins-heading h2 { font-size:29px; font-weight:450; letter-spacing:-1px; }.q-plugins-search { border-radius:5px; }.q-button-primary { background:var(--accent); color:var(--accent-ink)!important; box-shadow:none; }.q-nav-item:hover,.q-provider-option:hover { transform:none; }
+@media(min-width:1500px) { .q-atlas-page { padding-top:40px; }.q-atlas-home-grid { gap:90px; grid-template-columns:minmax(0,1fr) 310px; }.q-atlas-intro h1 { font-size:78px; }.q-atlas-workspace-card { padding:26px; } }
+@media(max-width:1150px) { .q-atlas-page { padding:24px 30px; }.q-atlas-home-grid { gap:35px; grid-template-columns:minmax(0,1fr) 260px; }.q-atlas-recipes { grid-template-columns:1fr; gap:0; margin-bottom:25px; }.q-atlas-recipes>button { padding:10px 0; border:0; border-bottom:1px solid var(--border); }.q-atlas-recipes small { display:none; }.q-atlas-recipes>button>svg:last-child { opacity:1; }.q-atlas-recipe-no { display:block; font:8px ui-monospace,monospace; color:var(--text-muted); }.q-topbar { padding:0 17px; }.q-topbar nav { gap:0; }.q-atlas-brand-caption { font-size:6px; letter-spacing:1px; } }
+@media(max-width:800px) { .q-atlas-home-grid { grid-template-columns:minmax(0,1fr); gap:30px; }.q-atlas-control { display:grid; grid-template-columns:1fr 1fr; gap:22px; padding-top:0; }.q-atlas-trace { display:none; }.q-atlas-workspace-card { grid-row:span 2; }.q-atlas-intro h1 { font-size:60px; }.q-atlas-recipes { grid-template-columns:repeat(3,minmax(0,1fr)); }.q-atlas-recipe-no { display:none; }.q-atlas-recipes>button { border-bottom:0; }.q-atlas-recipes>button>svg:last-child { display:none; }.q-atlas-fineprint { display:none; }.q-atlas-coordinate { font-size:7px; }.q-atlas-nav-no { display:none; }.q-topbar .q-nav-item { padding:0 10px; }.q-topbar>div:last-child { gap:0; } }
+@media(max-width:600px) { .q-topbar { padding:0 10px; gap:8px; height:58px; }.q-topbar .q-nav-item { padding:0 8px; font-size:10px; }.q-brand-mark { width:28px; }.q-atlas-page { padding:22px 20px; }.q-atlas-coordinate>span:last-child { display:none; }.q-atlas-intro h1 { font-size:54px; letter-spacing:-2.9px; }.q-atlas-intro h1 em { letter-spacing:-2px; }.q-atlas-period { font-size:30px; margin-left:9px; }.q-atlas-kicker { font-size:7px; }.q-atlas-control { grid-template-columns:1fr; }.q-atlas-workspace-card { display:block; }.q-atlas-folder-art { height:80px; }.q-atlas-workspace-card h2 { font-size:30px; }.q-atlas-engine-card { padding:0 0 15px; }.q-atlas-recipes { grid-template-columns:1fr; }.q-atlas-recipes>button { padding:12px 0; border-bottom:1px solid var(--border); }.q-atlas-recipes small { display:block; }.q-atlas-recipes>button>svg:last-child { display:block; }.q-atlas-recipes>button>svg:first-of-type { margin-right:3px; }.q-atlas-launch { padding:15px; }.q-atlas-launch textarea { font-size:16px; }.q-atlas-editable { display:none; }.q-atlas-footer>span:last-child { display:none; }.q-atlas-empty-projects { align-items:flex-start; padding:17px 13px; }.q-atlas-current { display:none; }.q-project-sidebar { width:165px; }.q-editor-empty h2 { font-size:29px; }.q-editor-kicker { font-size:6px; }.q-editor-empty>p { font-size:9px; }.q-workbench-toolbar { padding:0 10px; }.q-atlas-editor-start { font-size:9px; gap:5px; padding:8px; } }
+@media(max-width:600px) { .q-agent-suggestions { grid-template-columns:1fr; gap:0; }.q-agent-suggestions>button { flex-direction:row; align-items:center; padding:10px 2px; border-right:0; border-bottom:1px solid var(--border); }.q-agent-suggestions>button span { flex:1; } }
+@media(max-height:760px) {
+  .q-agent-welcome { padding-top:12px; padding-bottom:8px; }
+  .q-agent-welcome-icon { margin-bottom:10px; }
+  .q-atlas-agent-kicker { margin-bottom:8px; }
+  .q-agent-welcome>p { margin-top:10px; }
+  .q-agent-suggestions { margin-top:12px; }
+  .q-agent-suggestions>button { padding-top:8px; padding-bottom:8px; }
+  .q-agent-welcome-note { display:none; }
+  .q-editor-empty { padding:12px; }
+  .q-editor-emblem { display:none; }
+  .q-workbench-editor .q-editor-empty h2 { font-size:clamp(24px,4vh,30px); margin-top:8px; margin-bottom:4px; }
+  .q-editor-empty>p { font-size:11px; line-height:1.5; margin-top:6px; }
+  .q-editor-empty>p br { display:none; }
+  .q-atlas-editor-start { margin:10px 0 12px; padding:7px 10px; }
+  .q-editor-shortcuts { gap:4px; }
+  .q-workbench-editor .q-shortcut-row { gap:10px; font-size:10px; padding:1px 0; }
+  .q-workbench-editor .q-shortcut-row kbd { min-width:52px; font-size:8px; }
+}
+@media(prefers-reduced-motion:reduce) { .q-atlas-launch-bottom>button { transition:none; }.q-atlas-launch-bottom>button:hover { transform:none; } }
+@media(max-width:600px) { .q-workbench-editor .q-editor-empty h2 { font-size:clamp(18px,5vw,29px); }.q-workbench-editor .q-editor-empty>p { max-width:180px; }.q-workbench-editor .q-shortcut-row { gap:10px; font-size:8px; } }

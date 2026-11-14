@@ -1,0 +1,9 @@
+     ✓ feeds a real failed behavioral assertion back into a targeted repair 2893ms
+     ✓ feeds a failed public acceptance result back into a focused source repair 2457ms
+     ✓ searches a failed edit identifier instead of a capitalized issue-title word 2548ms
+     ✓ a failed write can NEVER become COMPLETE — false-completion prevention 2855ms
+     ✓ B: model never executes tools → run is honestly FAILED, never "(not needed)" and never COMPLETED 2704ms
+     ✓ D: an Ollama timeout FAILS the run — it can never complete 2672ms
+ Test Files  67 passed (67)
+      Tests  718 passed (718)
+   Duration  397.60s (tests 89%, import 9%, transform 2%)

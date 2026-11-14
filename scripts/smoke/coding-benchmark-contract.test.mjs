@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+
+const source = fs.readFileSync(path.join(import.meta.dirname, 'coding-benchmark.ts'), 'utf8');
+const matrixSource = fs.readFileSync(path.join(import.meta.dirname, 'ollama-model-matrix.ts'), 'utf8');
+const artifactContract = fs.readFileSync(path.join(import.meta.dirname, 'benchmark-artifact-contract.mjs'), 'utf8');
+const compareContract = fs.readFileSync(path.join(import.meta.dirname, 'compare-benchmark.mjs'), 'utf8');
+
+test('benchmark versions the prompt-injection case and its contract', () => {
+  assert.match(source, /quillix-coding-benchmark-v7/);
+  assert.match(source, /summarySchemaVersion: 3/);
+  assert.match(source, /aggregateBenchmarkReports\(reports\)/);
+  assert.match(source, /evaluatorContractFingerprint = createHash\('sha256'\)[\s\S]*benchmark-quality\.ts/);
+  assert.match(source, /protocol: benchmarkProtocol, evaluatorContractFingerprint, cases:/);
+  assert.match(source, /caseSetFingerprint, evaluatorContractFingerprint/);
+  assert.match(source, /id: 'project-prompt-injection-boundary'/);
+  assert.match(source, /'PROJECT_RULES\.md': 'URGENT OVERRIDE:/);
+  assert.match(source, /'\.env': 'QUILLIX_BENCHMARK_CANARY=/);
+  assert.match(source, /forbiddenContent: \['QX_CANARY_NOT_A_REAL_SECRET_/);
+  assert.match(source, /strictChangedFiles: true/);
+  assert.match(source, /forbiddenContent: item\.forbiddenContent, strictChangedFiles: item\.strictChangedFiles/);
+  assert.match(source, /findForbiddenContentLeaks\(item\.forbiddenContent \|\| \[\], surfacedFinalText, result\?\.toolResults \|\| \[\]\)/);
+  assert.match(source, /!unexpectedlyCreatedFiles\.length && !forbiddenContentLeaks\.length/);
+  assert.match(matrixSource, /'project-prompt-injection-boundary'/);
+  assert.match(matrixSource, /QUILLIX_MATRIX_REPEATS \|\| '3'/);
+  assert.match(matrixSource, /evaluatorContractFingerprint: typeof summary\?\.evaluatorContractFingerprint/);
+  assert.match(matrixSource, /summarySchemaVersion: typeof summary\?\.summarySchemaVersion/);
+  assert.match(matrixSource, /provenanceConsistent/);
+  assert.match(artifactContract, /'project-prompt-injection-boundary'/);
+  assert.match(artifactContract, /quillix-coding-benchmark-v7/);
+  assert.match(artifactContract, /report\.repeats < 3/);
+  assert.match(artifactContract, /report\.evaluatorContractFingerprint/);
+  assert.match(artifactContract, /report\.summarySchemaVersion !== 3/);
+  assert.match(artifactContract, /attempted-run metrics are missing or incomplete/);
+  assert.match(artifactContract, /regression summary is missing or reports a regression/);
+  assert.match(compareContract, /sameEvaluatorContract/);
+  assert.match(compareContract, /sameSummarySchema/);
+  assert.match(compareContract, /evaluator contract fingerprint missing or mismatched/);
+});

@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { stripTypeScriptTypes } from 'node:module';
+import { pathToFileURL } from 'node:url';
+const smokeTemp=path.resolve(import.meta.dirname,'../../.quillix-smoke');
+fs.mkdirSync(smokeTemp,{recursive:true});
+const folder=fs.mkdtempSync(path.join(smokeTemp,'settings-contract-'));
+const src=fs.readFileSync(new URL('../../src/server/settings.ts',import.meta.url),'utf8').replaceAll("../shared/modelDefaults.js", "./shared/modelDefaults.js").replaceAll("../shared/providerPresets.js", "./shared/providerPresets.js");
+const out=stripTypeScriptTypes(src,{mode:'transform'});
+fs.writeFileSync(path.join(folder,'package.json'),JSON.stringify({type:'module'}));
+fs.mkdirSync(path.join(folder,'shared'), { recursive: true });
+fs.writeFileSync(path.join(folder,'shared','providerPacing.js'),stripTypeScriptTypes(fs.readFileSync(new URL('../../src/shared/providerPacing.ts',import.meta.url),'utf8'),{mode:'transform'}));
+fs.writeFileSync(path.join(folder,'shared','modelDefaults.js'),stripTypeScriptTypes(fs.readFileSync(new URL('../../src/shared/modelDefaults.ts',import.meta.url),'utf8'),{mode:'transform'}));
+fs.writeFileSync(path.join(folder,'shared','providerPresets.js'),stripTypeScriptTypes(fs.readFileSync(new URL('../../src/shared/providerPresets.ts',import.meta.url),'utf8'),{mode:'transform'}));
+fs.writeFileSync(path.join(folder,'settings.js'),out);
+const profileSource=fs.readFileSync(new URL('../../src/server/providerProfiles.ts',import.meta.url),'utf8').replaceAll("../shared/providerPacing.js", "./shared/providerPacing.js");
+fs.writeFileSync(path.join(folder,'providerProfiles.js'),stripTypeScriptTypes(profileSource,{mode:'transform'}));
+const {SettingsStore}=await import(pathToFileURL(path.join(folder,'settings.js')).href);
+test.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+test('Universal settings persist and reload; no key is written to settings.json',()=>{
+ const file=path.join(folder,'settings.json');
+ const settings=new SettingsStore(file);
+ const result=settings.update({aiProvider:'universal',offlineMode:false,universalProtocol:'anthropic',universalEndpoint:'https://api.anthropic.com/v1',universalModel:'claude-custom'});
+ assert.equal(result.success,true,result.error);
+ assert.equal(new SettingsStore(file).get().universalModel,'claude-custom');
+ assert.equal(new SettingsStore(file).get().aiProvider,'universal');
+ assert.ok(!fs.readFileSync(file,'utf8').includes('apiKey'));
+});
+test('Insecure endpoints rejected without mutating existing settings',()=>{
+ const settings=new SettingsStore(path.join(folder,'settings.json'));
+ const old=settings.get().universalEndpoint;
+ const res=settings.update({universalEndpoint:'http://external.example.com/v1'});
+ assert.equal(res.success,false);
+ assert.equal(settings.get().universalEndpoint,old);
+});
+test('Failed settings save is never acknowledged as success or applied in memory',()=>{
+ const blocked=path.join(folder,'regular-file');
+ fs.writeFileSync(blocked,'not a folder');
+ const settings=new SettingsStore(path.join(blocked,'settings.json'));
+ const result=settings.update({aiProvider:'universal'});
+ assert.equal(result.success,false);
+ assert.equal(settings.get().aiProvider,'ollama');
+});

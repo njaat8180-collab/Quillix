@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "outDir": ".qa-dist",
+    "rootDir": ".",
+    "types": ["node"],
+    "allowImportingTsExtensions": false,
+    "noEmit": false,
+    "noEmitOnError": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["server.ts", "src/server/**/*.ts", "src/shared/types.ts"],
+  "exclude": ["node_modules", "dist", ".qa-dist", "src/server/__tests__"]
+}

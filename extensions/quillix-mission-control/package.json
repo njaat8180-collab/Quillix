@@ -1,0 +1,72 @@
+{
+  "name": "quillix-mission-control",
+  "displayName": "QUILLIX MISSION CONTROL",
+  "description": "Deadline tracker sidebar for the QUILLIX mission: deadline countdown, verified progress, current phase/task, blockers, test results, checkpoints and next tasks, read live from .quillix/mission/goal-state.json.",
+  "version": "0.1.0",
+  "publisher": "quillix",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "quillix",
+    "mission",
+    "deadline",
+    "progress",
+    "agent"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onView:quillix.missionControl"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "quillix",
+          "title": "QUILLIX",
+          "icon": "$(target)"
+        }
+      ]
+    },
+    "views": {
+      "quillix": [
+        {
+          "id": "quillix.missionControl",
+          "name": "MISSION CONTROL",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "quillix.missionControl.refresh",
+        "title": "QUILLIX: Refresh Mission Control",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "quillix.missionControl.openMissionFolder",
+        "title": "QUILLIX: Open Mission Files",
+        "icon": "$(folder)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "quillix.missionControl.refresh",
+          "when": "view == quillix.missionControl",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Only reads the workspace-local .quillix/mission/goal-state.json file and renders it in a restricted webview."
+    }
+  }
+}

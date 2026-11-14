@@ -1,0 +1,15 @@
+{
+  "name": "NUVRO AI",
+  "description": "Windows desktop AI coding agent with local Ollama, Sarvam AI, OpenAI-compatible / Responses, Anthropic and Gemini providers, tools, and verified file generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "OLLAMA_LOCAL",
+    "SARVAM_AI",
+    "UNIVERSAL_API_OPENAI_CHAT",
+    "UNIVERSAL_API_RESPONSES",
+    "ANTHROPIC_MESSAGES",
+    "GOOGLE_GEMINI",
+    "FILE_WRITING_AND_VERIFICATION",
+    "HOME_QUICK_CONNECT"
+  ]
+}
