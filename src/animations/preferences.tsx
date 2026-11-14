@@ -23,6 +23,23 @@ export function readLocalAnimationLevel(): QuillixAnimationLevel {
   } catch {
     // localStorage unavailable — fall through
   }
+  // Honor the OS "reduce motion" preference when the user has not made an
+  // explicit choice. Motion (library) already honors it via
+  // `reducedMotion="user"` at the default level, but the CSS-level ambient
+  // effects (orbs, particles, gradients, scroll reveals) do not — so an
+  // explicit stored choice or a persisted server value still wins, otherwise
+  // we seed "off" instead of forcing full animation on first paint.
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return 'off';
+    }
+  } catch {
+    // matchMedia unavailable (e.g. SSR/tests) — fall through to the default.
+  }
   return 'full';
 }
 
