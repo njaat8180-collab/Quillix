@@ -1,16 +1,21 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { TopHeader, OllamaState, MainView } from './components/TopHeader.js';
-import { SettingsScreen } from './components/SettingsScreen.js';
+// Heavy overlays are loaded on demand so the first-paint chunk stays small.
+const SettingsScreen = lazy(() => import('./components/SettingsScreen.js').then(m => ({ default: m.SettingsScreen })));
 import { AtlasDashboard as DashboardView } from './components/AtlasDashboard.js';
 import { ActionHub } from './components/ActionHub.js';
 import { WorkspaceView } from './components/WorkspaceView.js';
 import { WorkbenchLayout, WorkspaceCommand } from './components/WorkbenchLayout.js';
 import { ChatPanel, PendingApproval } from './components/ChatPanel.js';
-import { OnboardingFlow } from './components/OnboardingFlow.js';
+const OnboardingFlow = lazy(() => import('./components/OnboardingFlow.js').then(m => ({ default: m.OnboardingFlow })));
+// DiffViewer is small (5.9 KB) and is also statically imported by
+// WorkspaceView, so it stays a static import — a dynamic import here would be
+// flagged as ineffective by the bundler.
 import { DiffViewer } from './components/DiffViewer.js';
-import { CommandPalette, useCommandPalette, CommandPaletteProvider } from './components/CommandPalette.js';
+import { useCommandPalette, CommandPaletteProvider } from './components/CommandPaletteState.js';
+const CommandPalette = lazy(() => import('./components/CommandPalette.js').then(m => ({ default: m.CommandPalette })));
 import {
   AgentActivity,
   AgentMode,
@@ -1051,6 +1056,7 @@ export default function App() {
       )}
 
       {/* --- Overlays --- */}
+      <Suspense fallback={null}>
       <SettingsScreen
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -1069,7 +1075,9 @@ export default function App() {
         ollama={ollama}
         onRefreshOllama={refreshOllama}
       />
+      </Suspense>
 
+      <Suspense fallback={null}>
       {viewingPatch && (
         <AnimatePresence mode="wait">
           <motion.div
@@ -1103,8 +1111,10 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       )}
+      </Suspense>
 
       {/* Command Palette */}
+      <Suspense fallback={null}>
       <CommandPalette
         isOpen={commandPalette.isOpen}
         onClose={commandPalette.close}
@@ -1186,7 +1196,10 @@ export default function App() {
         hasActiveProject={!!workspaceRoot}
       />
 
+      </Suspense>
+
       {/* Onboarding Flow */}
+      <Suspense fallback={null}>
       {showOnboarding && (
         <OnboardingFlow
           settings={settings!}
@@ -1195,6 +1208,7 @@ export default function App() {
           onSkip={() => setShowOnboarding(false)}
         />
       )}
+      </Suspense>
     </div>
       </CommandPaletteProvider>
   );

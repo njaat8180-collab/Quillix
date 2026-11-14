@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { ProjectProfile, ProjectRunInfo } from '../shared/types.js';
+import { readPackageManifest } from './packageManifest.js';
 
 // ---------------------------------------------------------------------------
 // Type definitions
@@ -171,11 +172,7 @@ function listFiles(root: string, depth: number, maxEntries: number): string[] {
 }
 
 function readPackageJson(root: string): any | undefined {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  } catch {
-    return undefined;
-  }
+  return readPackageManifest(root);
 }
 
 function readRequirements(root: string): string[] | undefined {

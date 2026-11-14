@@ -19,6 +19,7 @@ import { debugLog } from './debugLog.js';
 import { TypeScriptLanguageService } from './typescriptLanguageService.js';
 import type { TavilyVerificationService } from './tavilyVerification.js';
 import { redactSensitiveText, redactSensitiveTextForRoundTrip, restoreSensitiveValues, type SensitiveValueMap } from '../shared/secretRedaction.js';
+import { readPackageManifest } from './packageManifest.js';
 
 export interface ToolExecutionContext {
   /** Ask the user for explicit approval (agent runs stream this to the UI). */
@@ -1867,11 +1868,9 @@ export class ToolRegistry {
           if (!this.workspace.isWithinWorkspace(projectRoot)) return { toolCallId, toolName: name, success: false, output: 'Project root outside workspace.', error: 'Project root outside workspace.' };
           const profile = LanguageRunnerRegistry.detect(projectRoot);
           let cmd = profile.buildCommand;
-          if (!cmd && fs.existsSync(path.join(projectRoot, 'package.json'))) {
-            try {
-              const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
-              if (manifest.scripts?.build) cmd = 'npm run build';
-            } catch { /* bad manifest is not a successful build */ }
+          if (!cmd) {
+            const manifest = readPackageManifest(projectRoot);
+            if (manifest?.scripts?.build) cmd = 'npm run build';
           }
           if (!cmd) return { toolCallId, toolName: name, success: false, output: 'No build command configured for this project.', error: 'No build command configured.' };
           const res = await this.terminal.executeCommand(cmd, projectRoot, undefined, 60000, 'agent');
@@ -1922,10 +1921,8 @@ export class ToolRegistry {
             };
           }
           if (!cmd) {
-            try {
-              const manifest = JSON.parse(fs.readFileSync(path.join(targetRoot, 'package.json'), 'utf8'));
-              if (manifest.scripts?.test && !/no test specified/i.test(manifest.scripts.test)) cmd = 'npm test';
-            } catch { /* No package.json or invalid config */ }
+            const manifest = readPackageManifest(targetRoot);
+            if (manifest?.scripts?.test && !/no test specified/i.test(manifest.scripts.test)) cmd = 'npm test';
             if (!cmd) return { toolCallId, toolName: name, success: false, output: 'No test command configured in this project.', error: 'No test suite configured.' };
             if (args.testPath) cmd += ` -- ${args.testPath}`;
             cwd = targetRoot;
@@ -1944,10 +1941,8 @@ export class ToolRegistry {
           const projectRoot = path.resolve(root, context.projectPrefix || '.');
           if (!this.workspace.isWithinWorkspace(projectRoot)) return { toolCallId, toolName: name, success: false, output: 'Project root outside workspace.', error: 'Project root outside workspace.' };
           let cmd: string | undefined;
-          try {
-            const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
-            if (manifest.scripts?.lint) cmd = 'npm run lint';
-          } catch { /* not a Node project */ }
+          const manifest = readPackageManifest(projectRoot);
+          if (manifest?.scripts?.lint) cmd = 'npm run lint';
           if (!cmd && fs.existsSync(path.join(projectRoot, 'tsconfig.json'))) cmd = 'npx --no-install tsc --noEmit';
           if (!cmd) return { toolCallId, toolName: name, success: false, output: 'No linter configured for this project.', error: 'No linter configured.' };
           const res = await this.terminal.executeCommand(cmd, projectRoot, undefined, 60000, 'agent');
