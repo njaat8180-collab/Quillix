@@ -65,10 +65,28 @@ function detectProviderTextKind(content: string): ProviderTextSegmentKind {
   return 'text';
 }
 
+/** True when a fenced block is shaped like a tool-call envelope rather than source code. */
+function looksLikeToolCallEnvelope(content: string, knownTools: Set<string> | null): boolean {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith('{')) return false;
+  if (!/["'](?:name|tool|function)["']\s*:/.test(trimmed)) return false;
+  if (!knownTools || !knownTools.size) return true;
+  const names = [...knownTools]
+    .filter(name => /^[A-Za-z0-9_-]+$/.test(name))
+    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!names.length) return true;
+  // The names must be joined with "|": interpolating the array directly would
+  // put a comma-separated list inside the alternation, which never matches and
+  // would silently disable this guard.
+  return new RegExp(`["'](?:name|tool)["']\\s*:\\s*["'](?:${names.join('|')})["']`, 'i').test(trimmed);
+}
+
 /**
  * Converts only explicitly labelled fenced code into write_file calls.
  * A filename is required immediately before the fence, for example:
  * `src/app.ts:` followed by a fenced block. Unlabelled code remains prose.
+ * A fenced block that is a tool-call envelope is never written as source code:
+ * a malformed envelope must reach the tool-repair path, not the workspace.
  */
 export function extractExplicitCodeFileCalls(text: string): ParsedTextToolCalls {
   if (!text) return { calls: [], cleanedText: text };
@@ -80,6 +98,7 @@ export function extractExplicitCodeFileCalls(text: string): ParsedTextToolCalls 
     const filePath = match[1].replace(/\\/g, '/');
     const content = match[3];
     if (!content.trim()) continue;
+    if (looksLikeToolCallEnvelope(content, null)) continue;
     calls.push(makeToolCall('write_file', { filePath, content }));
     removals.push({ start: match.index, end: match.index + match[0].length });
   }
@@ -320,6 +339,11 @@ export function extractToolCallsFromText(
       collectCalls(parsed.value, knownTools, calls, () => removals.push({ start: m!.index, end: m!.index + m![0].length }));
     } else if (!parsed.ok && /^```(?:tool|tools)\b/.test(m[0])) {
       throw new Error('Malformed tool block JSON; no tools were executed.');
+    } else if (!parsed.ok && looksLikeToolCallEnvelope(inner, knownTools)) {
+      // A malformed tool envelope must never fall through to the code-file
+      // routing, where its raw JSON would be written into the workspace as
+      // source code. Fail closed and let the engine ask for a clean retry.
+      throw new Error('Malformed tool-call JSON; no tools were executed.');
     }
   }
 
