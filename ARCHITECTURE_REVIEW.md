@@ -221,8 +221,7 @@ All limits below were **read from source**, not estimated.
 `src/server/resourceGuard.ts` gates expensive local-model and verification
 work. It samples CPU (`os.cpus()` deltas), disk free space, logical-drive
 health and physical-storage health, and refuses to start when a limit is
-breached (`resourceGuard.ts:164`). It is explicitly **read-only** — it never
-terminates user processes.
+breached. It is explicitly **read-only** — it never terminates user processes.
 
 Its behaviour was **verified live on this host** during the smoke run:
 
@@ -236,6 +235,99 @@ This is a **correct protective behaviour**, not a defect: an orphaned
 guard correctly paused the benchmark instead of competing for the remaining
 ~183 MB of free RAM. The benchmark then failed its *cleanup* assertion with
 `EBUSY` because the sandbox directory was still locked by the paused child.
+
+#### 8.1.1 Fixed defect — the guard measured its own telemetry as host load
+
+**Status:** fixed in this worktree (`src/server/resourceGuard.ts`).
+
+**Symptom.** `npm run package:win` aborted with
+`PAUSED_RESOURCE_GUARD — CPU 99%` on a host that was not actually busy.
+Every re-run produced the same ~99% reading, so Windows packaging could
+never start.
+
+**Root cause (verified by execution, not inference).** The guard measured
+host CPU as the delta between two `os.cpus()` samples. `waitUntilSafe()`
+performed the **Windows physical-storage probe — which spawns
+`powershell.exe` — between those two samples**:
+
+1. the CPU baseline was captured in the constructor;
+2. `waitUntilSafe()` awaited `refreshPhysicalStorageHealth()`, spawning
+   `powershell.exe` (a 3 s timeout, and on this host the probe genuinely
+   times out);
+3. `evaluate()` then took the CPU sample, so the delta **contained the
+   guard's own `powershell.exe` work** and was reported as host load.
+
+Measured on this host with a standalone probe:
+
+```
+current (includes own powershell probe) : cpu 98.98  → allowed false
+evaluate() only, no storage probe       : cpu 100     → allowed false
+probe already warm, second sample       : (no cpu)   → allowed true
+```
+
+The probe was also measured in isolation: `powershell.exe` alone consumed
+real CPU and **timed out at the configured 3 s limit**, confirming the
+guard's telemetry was both expensive and self-inflicted.
+
+**Fix.** CPU is now sampled **first**, over its own dedicated wall-clock
+window (`CPU_SAMPLE_WINDOW_MS`), and the Windows storage probe runs
+**afterwards** — so the guard's own telemetry can never enter the host-load
+reading. `snapshot()` accepts the pre-measured CPU value, keeping the
+existing synchronous `evaluate()` contract intact for all other callers.
+
+**Why a dedicated window.** `os.cpus()` counters advance in discrete ticks
+(10 ms per core). A ratio taken over a near-zero window is meaningless. A
+measured idle host reported anywhere from 62% to 94% CPU depending purely on
+how long the sample window happened to be. The guard now waits for a real
+150 ms window so the ratio is stable and actionable.
+
+**Secondary defect found by the fix (regression caught by the
+existing suite).** The first implementation used `setTimeout` + `Date.now()`
+for the sample window. The provider-router suite installs
+`vi.useFakeTimers()`, which replaces `globalThis.setTimeout` and freezes
+`Date.now()` — so the sampler never completed and
+`providerRouter.test.ts > keeps a provider Retry-After cooldown across turns`
+timed out (30 s). The fix captures the **real** `setTimeout` and a
+**monotonic** `process.hrtime.bigint()` clock at module load, so the guard
+is independent of any surrounding test harness. The
+`waitUntilSafe()` deadline was moved onto the same monotonic clock for the
+same reason.
+
+**Verification (all executed on this host):**
+
+```
+npm run lint                                      → exit 0
+vitest resourceGuard.test.ts + providerRouter.test.ts → 24 passed
+vitest resourceGuard.test.ts (final)               → 12 passed
+npm run test:resource-guard                       → PASS
+package-resource-preflight.ts                     → {"status":"PASS","cpuPercent":76.36}
+```
+
+Four regression tests were added to
+`src/server/__tests__/resourceGuard.test.ts`:
+
+- the guard's own storage probe is not counted as host CPU load;
+- CPU is sampled over a real window and reports a usable percentage;
+- **the gate is not neutered** — a genuinely saturated host is still blocked
+  (verified at `CPU 98–100%` → `allowed: false`);
+- the guard still works when the caller installs fake timers.
+
+**New reusable diagnostics** (both promoted out of throwaway probes and
+wired into `package.json`):
+
+- `npm run test:resource-guard` → `scripts/smoke/resource-guard-verify.ts`
+  — end-to-end proof that the guard allows an idle host **and** blocks a
+  saturated one. Prints JSON and exits non-zero on either violation.
+- `npm run probe:cpu-window` → `scripts/smoke/cpu-sample-window-probe.mjs`
+  — quantifies how `os.cpus()` accuracy varies with the sample-window
+  length, which is the evidence behind `CPU_SAMPLE_WINDOW_MS`.
+
+**Note on remaining blocks.** After the fix the guard still reports and
+blocks on *genuine* host load (76%, then 95%). Process inspection confirmed
+those samples were caused by **other agents' concurrent test runs** on this
+shared 8-core host (including coverage runs from a different repository),
+not by Quillix itself. The guard was deliberately **not** weakened to make
+those runs pass.
 
 **Improvement implemented by Codevian:** the orphaned child was identified
 and terminated, and the suite then passed 2/2 with **no source change**.

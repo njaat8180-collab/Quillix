@@ -25,6 +25,8 @@
     "test:benchmark-quality": "tsx --test scripts/smoke/benchmark-quality.test.ts",
     "test:benchmark-compare": "node --test scripts/smoke/compare-benchmark.test.mjs",
     "test:package-preflight": "node --test scripts/smoke/package-resource-preflight.test.mjs",
+    "test:resource-guard": "tsx scripts/smoke/resource-guard-verify.ts",
+    "probe:cpu-window": "node scripts/smoke/cpu-sample-window-probe.mjs",
     "test:nsis-fallback-cleanup": "node --test scripts/smoke/cleanup-incomplete-nsis.test.mjs",
     "benchmark:acceptance": "tsx scripts/smoke/coding-benchmark.ts --acceptance",
     "benchmark:compare": "node scripts/smoke/compare-benchmark.mjs",

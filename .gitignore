@@ -43,6 +43,7 @@ CommandPalette.txt
 components_list.txt
 remaining_quillix.txt
 branding-files.txt
+cpu-sample-window.json
 
 .moag/
 test/*/
