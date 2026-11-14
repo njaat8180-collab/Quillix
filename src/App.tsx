@@ -230,7 +230,7 @@ export default function App() {
           return current;
         });
         if (status.busy && !isWorkingRef.current) {
-          setAgentBanner(status.stopping ? 'Stopping the active server taskâ€¦' : 'An agent task is already running on the serverâ€¦');
+          setAgentBanner(status.stopping ? 'Stopping the active server task…' : 'An agent task is already running on the server…');
         } else if (!status.busy && isWorkingRef.current && !abortControllerRef.current) {
           setAgentBanner(null);
         }
@@ -408,7 +408,7 @@ export default function App() {
     async (prompt: string, resumeTaskId?: string) => {
       if (isWorking) return;
       if (!workspaceRoot || !conversationModeReady) {
-        setAgentBanner('Loading the active workspace and its saved Chat/Agent modeâ€¦');
+        setAgentBanner('Loading the active workspace and its saved Chat/Agent mode…');
         return;
       }
       // Resuming a saved checkpoint is still an Agent action. Never let the
@@ -431,7 +431,7 @@ export default function App() {
         : (mode === 'ask' || mode === 'plan') && isMutationRequest(prompt, {currentFile: activeEditorFile}) ? 'agent' : mode;
       if (conversationMode === 'agent' && effectiveMode !== mode) {
         setMode(effectiveMode);
-        setAgentBanner('Coding request detected â€” switched to Agent mode so files can be changed.');
+        setAgentBanner('Coding request detected — switched to Agent mode so files can be changed.');
       }
 
       let chatId = activeChatId;
@@ -472,7 +472,7 @@ export default function App() {
       setPhases([]);
       setLiveFiles([]);
       setStreamingText('');
-      setAgentBanner('Thinkingâ€¦');
+      setAgentBanner('Thinking…');
       lastPromptRef.current = prompt;
 
       const controller = new AbortController();
@@ -556,7 +556,7 @@ export default function App() {
               const act: AgentActivity = data.activity;
               if (act.type === 'editing_file' || act.type === 'applying_patch') {
                 const m = /(?:changes for|Applied changes to|Change staged for review:\s*)(.+)$/.exec(act.message);
-                if (m) setAgentBanner(`NUVRO AI is editing ${m[1].trim()}â€¦`);
+                if (m) setAgentBanner(`NUVRO AI is editing ${m[1].trim()}…`);
               } else if (act.type === 'running_command' || act.type === 'running_tests') {
                 setAgentBanner(act.message);
               } else if (act.type === 'thinking' || act.type === 'planning') {
@@ -572,7 +572,7 @@ export default function App() {
               // Watch the coding process live: open the file in the editor
               // (visible whenever the workspace view is open).
               setFocusFileRequest({ path: data.patch.filePath, nonce: Date.now() });
-              setAgentBanner(`NUVRO AI is editing ${data.patch.filePath}â€¦`);
+              setAgentBanner(`NUVRO AI is editing ${data.patch.filePath}…`);
             } else if (data.event === 'approval') {
               setPendingApproval({ approvalId: data.approvalId, request: data.request });
             } else if (data.event === 'done') {
@@ -644,7 +644,7 @@ export default function App() {
         setPendingApproval(null);
         setAgentBanner(null);
         abortControllerRef.current = null;
-        // Files/structure may have changed â€” refresh the explorer & project meta.
+        // Files/structure may have changed — refresh the explorer & project meta.
         setWorkspaceRefresh((n) => n + 1);
         refreshProjectMeta();
         refreshWorkspaceState();
@@ -990,7 +990,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Workspace view (explorer + editor + terminal) â€” opened from Action */}
+      {/* Workspace view (explorer + editor + terminal) — opened from Action */}
       {(studioVisited || studioActive) && (
         <AnimatePresence mode="wait">
           <motion.div
@@ -1003,7 +1003,7 @@ export default function App() {
           <WorkbenchLayout
             active={studioActive}
             root={workspaceRoot}
-            model={settings?.aiProvider === 'ollama' ? settings.model : settings?.aiProvider === 'openai' ? settings.openaiModel || 'OpenAI' : settings?.aiProvider === 'grok' ? settings.grokModel || 'Grok' : settings?.aiProvider === 'groq' ? settings.groqModel || 'Groq' : settings?.aiProvider === 'nvidia' ? settings.nvidiaModel || 'NVIDIA NIM' : settings?.aiProvider === 'universal' ? settings.universalModel || 'Universal API' : settings?.aiProvider || 'Checking modelâ€¦'}
+            model={settings?.aiProvider === 'ollama' ? settings.model : settings?.aiProvider === 'openai' ? settings.openaiModel || 'OpenAI' : settings?.aiProvider === 'grok' ? settings.grokModel || 'Grok' : settings?.aiProvider === 'groq' ? settings.groqModel || 'Groq' : settings?.aiProvider === 'nvidia' ? settings.nvidiaModel || 'NVIDIA NIM' : settings?.aiProvider === 'universal' ? settings.universalModel || 'Universal API' : settings?.aiProvider || 'Checking model…'}
             branch={projectMeta?.gitBranch}
             working={isWorking}
             changedCount={liveFiles.length}
