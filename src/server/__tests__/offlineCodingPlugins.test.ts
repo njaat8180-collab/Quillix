@@ -77,7 +77,7 @@ describe('bundled offline coding plugins', () => {
     registry = new ToolRegistry(workspace, terminal, git, new CodebaseIndexer(workspace, git), settings);
     vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Network is forbidden in offline plugin tests.'); }));
   });
-  afterEach(async () => { await registry.codingPlugins.dispose(); vi.unstubAllGlobals(); vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }); });
+  afterEach(async () => { await registry.codingPlugins.dispose(); vi.unstubAllGlobals(); vi.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
   it('exposes sixteen real offline packs, with unique registered schemas', () => {
     const catalog = registry.codingPlugins.catalog();
