@@ -27,7 +27,9 @@ fs.writeFileSync(path.join(temp, 'shared', 'providerPacing.js'), stripTypeScript
 // follow live settings; keep that dependency beside the copied modules too.
 const overdriveState = fs.readFileSync(path.join(root, 'src/shared/overdriveState.ts'), 'utf8');
 fs.writeFileSync(path.join(temp, 'shared', 'overdriveState.js'), stripTypeScriptTypes(overdriveState, { mode: 'transform' }));
-for (const filename of ['sarvam', 'resourceGuard', 'brainRegistry', 'universal', 'openai', 'settings', 'providerStream', 'providerProfiles', 'rateLimitService', 'promptCache']) {
+// providerKeyRotation is imported by universal.ts for multi-key failover and
+// must be present in this isolated fixture as well.
+for (const filename of ['sarvam', 'resourceGuard', 'brainRegistry', 'universal', 'openai', 'settings', 'providerStream', 'providerProfiles', 'rateLimitService', 'promptCache', 'providerKeyRotation']) {
   let source = fs.readFileSync(path.join(root, 'src/server', `${filename}.ts`), 'utf8');
   source = source.replaceAll("../shared/providerPacing.js", "./shared/providerPacing.js").replaceAll("../shared/overdriveState.js", "./shared/overdriveState.js");
   if (filename === 'settings') {

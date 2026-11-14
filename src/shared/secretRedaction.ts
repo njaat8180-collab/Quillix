@@ -7,6 +7,11 @@ function redact(content: string, mask: (value: string, kind: string) => string):
     .replace(/AIza[0-9A-Za-z_-]{35}/g, value => mask(value, 'API_KEY'))
     .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, value => mask(value, 'AWS_ACCESS_KEY'))
     .replace(/\bsk_(?:live|test|proj)_[A-Za-z0-9_-]{16,}\b/gi, value => mask(value, 'PROVIDER_KEY'))
+    // OpenAI-style keys are hyphenated, not underscored: "sk-<48 chars>",
+    // "sk-proj-<...>", "sk-svcacct-<...>". Without this, a key stored in a
+    // variable whose name does not look secret-like (e.g. `openaiKey`) would be
+    // pasted verbatim into an AI prompt.
+    .replace(/\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}/g, value => mask(value, 'PROVIDER_KEY'))
     .replace(/\bgsk_[A-Za-z0-9_-]{16,}\b/gi, value => mask(value, 'PROVIDER_KEY'))
     .replace(/\bhf_[A-Za-z0-9]{20,}\b/g, value => mask(value, 'PROVIDER_KEY'))
     .replace(/\bgh[pousr]_[0-9A-Za-z]{20,}\b/g, value => mask(value, 'GITHUB_TOKEN'))

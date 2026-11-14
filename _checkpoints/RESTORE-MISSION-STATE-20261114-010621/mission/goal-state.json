@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "mission": "QUILLIX > CURSOR",
+  "startedAt": "2026-11-08T00:00:00+05:30",
+  "deadline": "2026-11-11T23:59:00+05:30",
+  "releaseTarget": "2026-11-12T00:00:00+05:30",
+  "phase": {
+    "id": "P1",
+    "title": "Foundation & recovery",
+    "startedAt": "2026-11-08T00:00:00+05:30",
+    "endsAt": "2026-11-08T23:59:00+05:30",
+    "note": "Audit, mission tracking, ownership, P0 triage"
+  },
+  "currentTask": "P1.2/P1.3/P1.4 Mission Control tracker (persisted state + VS Code sidebar + Studio panel)",
+  "counts": { "completed": 40, "inProgress": 4, "pending": 23, "total": 67 },
+  "verifiedProgressPercent": 60,
+  "nextTasks": [
+    "P2.1 M3.5 failed-test -> agent auto-repair (prove with a real failing test run)",
+    "P1.6 Kilo P0 dead-controls audit (requested, awaiting reply)",
+    "P2.4 M1.5 incremental re-index on save",
+    "P2.2 M2.3 batch approve/reject multi-file changeset"
+  ],
+  "blockers": [
+    { "id": "B1", "severity": "medium", "title": "Agent Mail server down (archive write-back degraded)", "approvalRequired": true },
+    { "id": "B2", "severity": "medium", "title": "Ollama unreachable / no live provider credentials", "approvalRequired": false },
+    { "id": "B3", "severity": "medium", "title": "Cursor baseline not collected", "approvalRequired": false }
+  ],
+  "tests": [
+    { "name": "tsc --noEmit", "status": "pass", "detail": "EXIT 0", "at": "2026-11-08T07:14:00Z" },
+    { "name": "npm test (602 Vitest)", "status": "pass", "detail": "602/602", "at": "2026-11-08T07:14:00Z" },
+    { "name": "npm run build", "status": "pass", "detail": "EXIT 0", "at": "2026-11-08T07:14:00Z" },
+    { "name": "test:provider-health-monitor", "status": "pass", "detail": "10 checks", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:ui-accessibility", "status": "pass", "detail": "23 checks", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:production-surface", "status": "pass", "detail": "21 checks", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:turbo-global-state", "status": "pass", "detail": "8 checks", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:crash-boundary", "status": "pass", "detail": "PASS", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:settings-health", "status": "pass", "detail": "10 checks", "at": "2026-11-08T07:40:00Z" },
+    { "name": "test:benchmark-artifact", "status": "blocked", "detail": "stale artifact; live Ollama required", "at": "2026-11-08T07:40:00Z" }
+  ],
+  "benchmarks": {
+    "cursorBaseline": "not-collected",
+    "harnessVerified": true,
+    "note": "No Cursor numbers are claimed until a baseline is collected."
+  },
+  "activity": {
+    "lastVerifiedAt": "2026-11-08T07:14:00Z",
+    "note": "Written by the running session only; no background work is running now.",
+    "current": "Mission Control tracker implemented (persisted state, Studio panel, VS Code sidebar)"
+  },
+  "latestCheckpoint": "_checkpoints/M75-studio-monitor-20261108-125408 (pre-MISSION-CONTROL state)",
+  "nextPlannedTask": "P2.1 M3.5 failed-test -> agent auto-repair verification",
+  "releaseGates": [
+    { "id": "G1", "title": "No known critical bugs", "status": "open" },
+    { "id": "G2", "title": "Core coding workflows tested", "status": "open" },
+    { "id": "G3", "title": "Build succeeds", "status": "pass", "detail": "build EXIT 0" },
+    { "id": "G4", "title": "Secrets protected (DPAPI, redaction)", "status": "pass", "detail": "settings-health + production-surface contracts" },
+    { "id": "G5", "title": "Real provider workflows tested", "status": "open", "detail": "needs credentials (B2)" },
+    { "id": "G6", "title": "Regression results documented", "status": "pass", "detail": "acceptance + this state file" },
+    { "id": "G7", "title": "Windows package verified", "status": "open", "detail": "package:win pending (B7)" },
+    { "id": "G8", "title": "Benchmark evidence preserved", "status": "partial", "detail": "harness verified; live numbers blocked (B2)" },
+    { "id": "G9", "title": "Limitations disclosed", "status": "pass", "detail": "BLOCKERS.md + BENCHMARKS.md" }
+  ]
+}

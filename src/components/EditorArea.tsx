@@ -4,6 +4,7 @@ import { X, Save, Sparkles, MessageSquare, Bug, CheckSquare, Wrench, FileCode, A
 import { api } from '../services/apiBridge.js';
 import { useTheme } from '../theme.js';
 import { QuillixMark } from './QuillixMark.js';
+import { ContextualChatBubble } from './ContextualChatBubble.js';
 import { editorModelPath, configureEditorIntelligence, revealEditorDestination, mergeEditorSources, registerProjectCompletionProvider, registerConnectedLspProviders, EDITOR_INTELLIGENCE_OPTIONS } from '../services/editorIntelligence.js';
 import { InlineCompletionCache, INLINE_COMPLETION_LANGUAGES, inlineCompletionCacheKey, subscribeInlineCancellation, isCompletionSuppressedContext, trimIncompleteTail, INLINE_COMPLETION_DEBOUNCE_MS, INLINE_COMPLETION_THROTTLE_MS } from '../shared/inlineCompletion.js';
 import type { EditorProjectSnapshot } from '../shared/editorProject.js';
@@ -89,6 +90,13 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
   const [inlineHint, setInlineHint] = useState(false);
   const [sourceRefresh, setSourceRefresh] = useState(0);
   const [problemCount, setProblemCount] = useState(0);
+  // M7.4: contextual chat. `hoveredLine` is the line under the pointer;
+  // `contextualAnchor` is the line the user explicitly asked about.
+  const [hoveredLine, setHoveredLine] = useState<number | null>(null);
+  const [hoveredTop, setHoveredTop] = useState(0);
+  const [contextualAnchor, setContextualAnchor] = useState<{ line: number; top: number; height: number } | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const [contextualViewport, setContextualViewport] = useState({ width: 0, height: 0 });
   const sourceFiles = React.useMemo(() => mergeEditorSources(snapshot?.root === workspaceId ? snapshot.files : [], tabs), [snapshot, workspaceId, tabs]);
   // Keep Preview usable while async project detection is warming up. The
   // detected profile replaces this fallback as soon as it is available.
@@ -432,6 +440,27 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
         setSelectedText(text);
       }
     });
+
+    // M7.4: remember which line the pointer is over so the editor can offer
+    // "Ask about this" for exactly that line.
+    editor.onMouseMove((event: any) => {
+      const line = event?.target?.position?.lineNumber;
+      if (typeof line !== 'number') {
+        setHoveredLine(null);
+        return;
+      }
+      setHoveredLine(line);
+      // The pixel offset of the line inside the editor viewport is what the
+      // anchored bubble and the hover affordance are positioned against.
+      const top = typeof editor.getTopForLineNumber === 'function'
+        ? Number(editor.getTopForLineNumber(line)) || 0
+        : 0;
+      setHoveredTop(top);
+    });
+    // NOTE: the pointer-leave handler lives on the editor container below, not
+    // on Monaco itself. Monaco fires onMouseLeave as soon as the pointer moves
+    // onto the overlaid "Ask about this" button, which would unmount the button
+    // before it could be clicked.
   };
 
   const getLanguage = (fileName: string): string => {
@@ -543,6 +572,43 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
     if (!activeTabPath) return;
     onAskInlineAI(action, selectedText, activeTabPath);
     setShowInlinePrompt(false);
+  };
+
+  // M7.4 — the bubble is clamped to the editor viewport, so the viewport size
+  // has to be measured (and re-measured on resize) before it can be placed.
+  useEffect(() => {
+    const element = editorContainerRef.current;
+    if (!element) return;
+    const update = () => setContextualViewport({ width: element.clientWidth, height: element.clientHeight });
+    update();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tabs.length]);
+
+  // M7.4: open the contextual chat bubble anchored to a specific line.
+  const openContextualChat = (line: number) => {
+    if (!activeTabPath) return;
+    setContextualAnchor({ line, top: hoveredTop, height: 18 });
+  };
+
+  // M7.4: ask the agent about the anchored line. The server rebuilds the
+  // bounded context window from the same shared helper the renderer uses, so
+  // only the neighbourhood of the line is ever sent.
+  const askAboutLine = async (question: string): Promise<string> => {
+    if (!activeTabPath || !contextualAnchor) throw new Error('No line is selected.');
+    const result = await api.askAboutLine({
+      filePath: activeTabPath,
+      line: contextualAnchor.line,
+      content: activeTab?.content ?? '',
+      question,
+    });
+    if (!result.success) throw new Error(result.error || 'The question could not be answered.');
+    return result.answer || '';
   };
 
   if (tabs.length === 0) {
@@ -760,7 +826,11 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
       )}
 
       {/* Monaco Editor Container */}
-      <div className="flex-1 min-h-0 min-w-0 h-full w-full overflow-hidden">
+      <div
+        ref={editorContainerRef}
+        onMouseLeave={() => setHoveredLine(null)}
+        className="flex-1 min-h-0 min-w-0 h-full w-full overflow-hidden relative"
+      >
         {!activeTab && fileOpenError ? (
           <div className="h-full min-h-0 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
             <p className="text-sm font-medium text-[var(--text)]">Could not display {fileOpenError.path}</p>
@@ -802,6 +872,35 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
               cursorSmoothCaretAnimation: 'on',
               smoothScrolling: true,
             }}
+          />
+        )}
+
+        {/* M7.4: offer a contextual question about the line under the pointer.
+            The button sits next to the line so it is obvious what it refers
+            to, and the bubble it opens stays anchored to that same line. */}
+        {hoveredLine !== null && !contextualAnchor && (
+          <button
+            type="button"
+            onClick={() => openContextualChat(hoveredLine)}
+            className="absolute z-30 flex items-center gap-1 rounded border border-blue-500/60 bg-[#161b22] px-1.5 py-0.5 text-[11px] text-blue-300 hover:bg-[#21262d]"
+            style={{ top: Math.max(0, hoveredTop), right: 16 }}
+            title={`Ask about line ${hoveredLine}`}
+            aria-label={`Ask about line ${hoveredLine}`}
+          >
+            <MessageSquare size={11} aria-hidden="true" />
+            <span>Ask about this</span>
+          </button>
+        )}
+
+        {contextualAnchor && activeTabPath && (
+          <ContextualChatBubble
+            line={contextualAnchor.line}
+            filePath={activeTabPath}
+            anchorTop={contextualAnchor.top}
+            lineHeight={contextualAnchor.height}
+            viewport={contextualViewport}
+            onAsk={askAboutLine}
+            onClose={() => setContextualAnchor(null)}
           />
         )}
       </div>

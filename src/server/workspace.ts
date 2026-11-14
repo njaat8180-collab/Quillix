@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { FileNode, SearchMatch } from '../shared/types.js';
 import { redactSensitiveText } from '../shared/secretRedaction.js';
 import { MAX_FILE_BYTES, fileSizeLimitError } from '../shared/largeFile.js';
+import { assertWorkspaceWritable } from './workspaceLock.js';
 
 // ---------------------------------------------------------------------------
 // Hardening constants
@@ -51,6 +52,17 @@ export class WorkspaceManager {
 
   public getRoot(): string {
     return this.workspaceRoot;
+  }
+
+  /**
+   * M9.6: refuse to mutate the workspace while another live NUVRO AI instance
+   * owns it. The owning instance itself is always allowed, and a lock whose
+   * owner crashed is ignored so the workspace recovers automatically.
+   */
+  private guardExclusiveWrite(): { success: boolean; error?: string } | null {
+    const guard = assertWorkspaceWritable(this.workspaceRoot);
+    if (guard.ok) return null;
+    return { success: false, error: guard.error };
   }
 
   /**
@@ -510,6 +522,8 @@ export class WorkspaceManager {
   public writeFile(relativePath: string, content: string): { success: boolean; error?: string; verified?: boolean; sizeBytes?: number } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     // M9.5: refuse oversized writes before touching the disk, with the same
     // honest limit the read path enforces.
     if (Buffer.byteLength(content || '', 'utf8') > MAX_FILE_BYTES) {
@@ -535,6 +549,8 @@ export class WorkspaceManager {
   public createFile(relativePath: string, content = ''): { success: boolean; error?: string; verified?: boolean; sizeBytes?: number } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     // M9.5: same oversized-write refusal as writeFile.
     if (Buffer.byteLength(content || '', 'utf8') > MAX_FILE_BYTES) {
       return { success: false, error: fileSizeLimitError(Buffer.byteLength(content || '', 'utf8')) };
@@ -563,6 +579,8 @@ export class WorkspaceManager {
   public deleteFile(relativePath: string): { success: boolean; error?: string } {
     const check = this.resolveSafePath(relativePath);
     if (!check.safe) return { success: false, error: check.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
     if (path.relative(this.workspaceRoot, check.fullPath) === '') return { success: false, error: 'Cannot delete the active workspace root.' };
 
     try {
@@ -587,6 +605,8 @@ export class WorkspaceManager {
 
     if (!oldCheck.safe) return { success: false, error: oldCheck.error };
     if (!newCheck.safe) return { success: false, error: newCheck.error };
+    const blocked = this.guardExclusiveWrite();
+    if (blocked) return blocked;
 
     try {
       if (!fs.existsSync(oldCheck.fullPath)) {

@@ -11,6 +11,7 @@ import { collectProviderStream } from './providerStream.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { dpapi } from './sarvam.js';
 import { rateLimitService } from './rateLimitService.js';
+import { providerKeyPool, classifyProviderFailure } from './providerKeyRotation.js';
 import { promptCacheKey, readPromptCache, writePromptCache } from './promptCache.js';
 import type { AICompletionOptions, AIProvider, ProviderCapabilities, ProviderUsage } from './qwen.js';
 import type { ToolCall, ToolDefinition, ProviderHealthSummary } from '../shared/types.js';
@@ -914,6 +915,32 @@ export class UniversalProvider implements AIProvider {
     if (cfg.auth?.type === 'none') credentials.unshift('');
     let credentialIndex = 0;
     let key = credentials[credentialIndex] || '';
+    // M9.3: every configured key is registered in the shared key pool, so a key
+    // that was rejected, rate limited or ran out of quota is skipped instead of
+    // being retried blindly, and the health of each key stays visible.
+    const keyScope = `universal:${cfg.endpoint}`;
+    const keyIds = providerKeyPool.register(keyScope, credentials);
+    let currentKeyId = keyIds[0] ?? '';
+    // Keys already used by this request. A key is never tried twice, so two
+    // broken keys can never send the request back and forth.
+    const attemptedKeyIds: string[] = currentKeyId ? [currentKeyId] : [];
+    if (currentKeyId) {
+      // Prefer a key that is not cooling down from an earlier failure.
+      try {
+        const preferred = providerKeyPool.select(keyScope, { preferredKeyId: currentKeyId });
+        if (preferred) {
+          const preferredIndex = keyIds.indexOf(preferred.keyId);
+          if (preferredIndex >= 0) {
+            credentialIndex = preferredIndex;
+            key = credentials[credentialIndex] || '';
+            currentKeyId = preferred.keyId;
+          }
+        }
+      } catch {
+        // Every key is cooling down: keep the primary key and let the provider
+        // answer; the pool still records the failure for the health report.
+      }
+    }
     if(!key && cfg.auth?.type!=='none') throw new Error('Save a Universal API key before using this provider.');
     const requestStartedAt = Date.now();
     this.diagnostics.requests++;
@@ -1088,6 +1115,9 @@ export class UniversalProvider implements AIProvider {
             const message=String(error?.cause?.code || error?.code || error?.message || error);
             const transientConnection=/(?:ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|fetch failed|socket hang up|network)/i.test(message);
             if (transientConnection && !controller.signal.aborted) noteProviderServerFailure(rateLimitScope);
+            // M9.3: a transport failure is recorded against the key but never
+            // cools it down — the next key would fail in exactly the same way.
+            if (currentKeyId) providerKeyPool.reportFailure(keyScope, currentKeyId, { message }, { cooldown: false });
             if (transientConnection && options.providerModelFailover !== true && attempt<UNIVERSAL_MAX_TRANSIENT_RETRIES && !controller.signal.aborted) {
               // Overdrive removes the exponential/jittered backoff: retry on
               // the minimal floor only. If the network is truly down the next
@@ -1106,8 +1136,13 @@ export class UniversalProvider implements AIProvider {
           if (response.ok) {
             this.diagnostics.httpSuccesses++;
             noteProviderServerSuccess(rateLimitScope);
+            // M9.3: the key answered, so it is healthy again.
+            if (currentKeyId) providerKeyPool.reportSuccess(keyScope, currentKeyId);
           } else if ([500,502,503,504,529].includes(response.status)) {
             noteProviderServerFailure(rateLimitScope);
+            // M9.3: a provider outage is not the key's fault — the failure is
+            // recorded, but the key keeps its eligibility.
+            if (currentKeyId) providerKeyPool.reportFailure(keyScope, currentKeyId, { status: response.status }, { cooldown: false });
           }
           if (response.status === 429) this.diagnostics.http429++;
           if (response.status === 402) this.diagnostics.http402++;
@@ -1120,11 +1155,57 @@ export class UniversalProvider implements AIProvider {
           // picture visible to every component (not this file's private map).
           rateLimitService.record(rateLimitScope, { requests: 1, tokens: Math.ceil(JSON.stringify(body).length / 4 + maxTokens) });
           rateLimitService.noteResponse(rateLimitScope, response);
-          if ([401, 403].includes(response.status) && credentialIndex + 1 < credentials.length) {
+          // M9.3: a rejected, unpaid or rate-limited key is remembered, and a
+          // different key of the same provider takes over when one is eligible.
+          let rotatedToNextKey = false;
+          const keyFailure = currentKeyId
+            ? classifyProviderFailure({
+                status: response.status,
+                message: response.status === 429 ? 'rate limit' : undefined,
+                retryAfterMs: response.headers?.get('retry-after')
+                  ? Number(response.headers.get('retry-after')) * 1000
+                  : undefined,
+              })
+            : null;
+          if (currentKeyId && keyFailure && [401, 402, 403, 429].includes(response.status)) {
+            providerKeyPool.reportFailure(keyScope, currentKeyId, {
+              status: response.status,
+              retryAfterMs: response.headers?.get('retry-after')
+                ? Number(response.headers.get('retry-after')) * 1000
+                : undefined,
+            });
+            // A plain rate limit is an account level window: rotating the key
+            // would not bypass it, so the same key keeps serving the request.
+            if (keyFailure.rotationWorthy && (response.status !== 429 || !overdrive)) {
+              // Only keys that have not been tried yet are eligible, so two
+              // broken keys can never send the request back and forth.
+              const next = providerKeyPool.select(keyScope, {
+                exclude: attemptedKeyIds,
+                allowUnavailable: true,
+              });
+              const nextIndex = next ? keyIds.indexOf(next.keyId) : -1;
+              if (next && nextIndex >= 0 && nextIndex !== credentialIndex) {
+                await response.body?.cancel();
+                releaseProviderSlot?.();
+                releaseProviderSlot = null;
+                credentialIndex = nextIndex;
+                currentKeyId = next.keyId;
+                attemptedKeyIds.push(next.keyId);
+                this.diagnostics.retries++;
+                attempt -= 1;
+                rotatedToNextKey = true;
+              }
+            }
+          }
+          if (rotatedToNextKey) continue;
+          if (!rotatedToNextKey && [401, 403].includes(response.status) && credentialIndex + 1 < credentials.length
+            && !attemptedKeyIds.includes(keyIds[credentialIndex + 1] ?? '')) {
             await response.body?.cancel();
             releaseProviderSlot?.();
             releaseProviderSlot = null;
             credentialIndex += 1;
+            currentKeyId = keyIds[credentialIndex] ?? currentKeyId;
+            if (currentKeyId) attemptedKeyIds.push(currentKeyId);
             this.diagnostics.retries++;
             attempt -= 1;
             continue;

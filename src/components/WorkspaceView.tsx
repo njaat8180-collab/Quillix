@@ -101,6 +101,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [activeDiffPatch, setActiveDiffPatch] = useState<FilePatch | null>(null);
   /** M2.5: an agent write and an unsaved user buffer raced on the same file. */
   const [editConflict, setEditConflict] = useState<{ filePath: string; diskContent: string; editorContent: string; reason?: string } | null>(null);
+  /** M2.5: the on-disk signature already surfaced for a path, so a conflict the
+   *  user chose to keep open is not re-raised until that file changes again. */
+  const surfacedDiskContent = useRef<Record<string, string>>({});
+  const tabsRef = useRef<EditorTab[]>(tabs);
+  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
   useEffect(() => {
     if (!tabs.some(tab => tab.isDirty)) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -334,6 +339,44 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusFileRequest?.nonce]);
 
+  // M2.5: catch external writes that never arrive as a live `patch` event
+  // (git restore, undo/rollback, auto-repair runs, the manual tool panel).
+  // Whenever the workspace refreshes, confirm every unsaved buffer still matches
+  // the file on disk and surface a conflict when it does not. The in-memory
+  // buffer is never replaced here - only reported.
+  useEffect(() => {
+    if (!active || editConflict) return;
+    const dirty = tabsRef.current.filter((t) => t.isDirty);
+    if (dirty.length === 0) return;
+    let cancelled = false;
+    const check = async () => {
+      for (const tab of dirty) {
+        if (cancelled) return;
+        try {
+          const disk = await api.readFile(tab.filePath);
+          if (cancelled) return;
+          if (!disk.success || typeof disk.content !== `string`) continue;
+          // Identical buffer, or identical to what the tab was opened with:
+          // nothing external happened to this file.
+          if (disk.content === tab.content || disk.content === tab.originalContent) continue;
+          if (surfacedDiskContent.current[tab.filePath] === disk.content) continue;
+          surfacedDiskContent.current[tab.filePath] = disk.content;
+          setEditConflict({
+            filePath: tab.filePath,
+            diskContent: disk.content,
+            editorContent: tab.content,
+            reason: `${tab.filePath} changed on disk outside the editor while your unsaved edits were open. Your buffer was preserved.`,
+          });
+          return;
+        } catch {
+          // A failed read is not a conflict: leave the unsaved buffer untouched.
+        }
+      }
+    };
+    void check();
+    return () => { cancelled = true; };
+  }, [active, refreshSignal, editConflict]);
+
   const handleCloseTab = (filePath: string) => {
     if (tabs.find(t => t.filePath === filePath)?.isDirty && !window.confirm('Discard unsaved changes to this file?')) return;
     const remaining = tabs.filter((t) => t.filePath !== filePath);
@@ -390,6 +433,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       // Leave the unsaved buffer in place; the next save re-detects the conflict
       // instead of silently overwriting the agent's version.
       setWorkspaceError(`Conflict kept open for ${conflict.filePath}. Save again once you have decided which version wins.`);
+      // Do not re-open the same dialog for this exact on-disk version; it will
+      // reappear only if the file changes again.
+      surfacedDiskContent.current[conflict.filePath] = conflict.diskContent;
       return;
     }
     if (resolution === 'reload') {

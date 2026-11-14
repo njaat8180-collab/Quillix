@@ -19,6 +19,13 @@ import { app, BrowserWindow, dialog, shell, ipcMain } from 'electron';
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { shutdownChildBounded, type ShutdownChild } from './desktopShutdown.js';
+
+/**
+ * Hardening: set once the bounded shutdown has finished, so the deferred quit
+ * in `before-quit` runs exactly once and cannot loop.
+ */
+let shutdownComplete = false;
 
 const HOST = '127.0.0.1';
 
@@ -248,6 +255,36 @@ function stopServerProcess(): void {
   }
 }
 
+/**
+ * Hardening: the shutdown of the spawned server is BOUNDED.
+ *
+ * `child.kill()` only asks the child to stop. A child that is stuck can ignore
+ * it, and Electron would then wait forever for a process that is never going
+ * to exit — the window simply refuses to close. This path escalates to a
+ * forced kill and, if even that fails, force-exits the app so the user is
+ * never left staring at a hung UI.
+ */
+async function stopServerProcessBounded(): Promise<void> {
+  if (!serverProcess || !ownsServerProcess) return;
+  const child = serverProcess;
+  serverProcess = null;
+  ownsServerProcess = false;
+  try {
+    child.removeAllListeners('exit');
+  } catch { /* the child may already be detached */ }
+  log('stopping NUVRO AI server (bounded shutdown)...');
+  const result = await shutdownChildBounded(child as unknown as ShutdownChild, {
+    graceMs: 3_000,
+    forceMs: 1_500,
+    onLog: (message) => log(message),
+  });
+  if (!result.exited) {
+    // The child outlived both windows. Never hang the UI on quit.
+    log('server process did not exit in time; forcing application exit');
+    app.exit(0);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Errors                                                              */
 /* ------------------------------------------------------------------ */
@@ -424,9 +461,18 @@ if (!gotLock) {
     app.quit();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     appIsQuitting = true;
-    stopServerProcess();
+    // Hardening: the first quit is deferred until the bounded shutdown of the
+    // server has finished. Without this the app would exit while the child
+    // server is still alive (leaving an orphaned process holding the port),
+    // or hang waiting for a child that never dies.
+    if (shutdownComplete) return;
+    event.preventDefault();
+    void stopServerProcessBounded().finally(() => {
+      shutdownComplete = true;
+      app.quit();
+    });
   });
 
   // Raw signals (Ctrl+C in a terminal, `kill`) do not run Electron's normal
@@ -434,8 +480,10 @@ if (!gotLock) {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
       appIsQuitting = true;
-      stopServerProcess();
-      app.quit();
+      void stopServerProcessBounded().finally(() => {
+        shutdownComplete = true;
+        app.quit();
+      });
     });
   }
 }
