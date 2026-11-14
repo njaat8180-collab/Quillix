@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ResourceGuard, parseWindowsStoragePayload } from '../resourceGuard.js';
 import { setOverdriveActive } from '../../shared/overdriveState.js';
 
@@ -68,6 +68,63 @@ describe('resource-aware execution guard', () => {
     const armedGuard = new ResourceGuard({ maxCpuPercent: -1 });
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(armedGuard.evaluate(process.cwd()).allowed).toBe(false);
+  });
+
+  it('does not count its own Windows storage probe as host CPU load', async () => {
+    // The Windows storage probe spawns powershell.exe. The CPU sample must be
+    // taken BEFORE that probe, otherwise the guard measures its own telemetry
+    // and reports a false high-load reading (it used to report ~99% and
+    // permanently block Windows packaging).
+    //
+    // The probe is a fixed cost, so a generous CPU limit must still allow the
+    // gate to pass no matter how busy the host is.
+    const guard = new ResourceGuard({ maxCpuPercent: 100, minDiskFreePercent: 0 });
+    const result = await guard.waitUntilSafe(process.cwd(), { maxWaitMs: 0 });
+    expect(result.allowed).toBe(true);
+  });
+
+  it('samples CPU over a real window instead of a near-zero delta', async () => {
+    // os.cpus() counters advance in discrete ticks, so a ratio taken over a
+    // near-zero window is meaningless. waitUntilSafe must take a dedicated
+    // sample window and report a usable CPU percentage.
+    const guard = new ResourceGuard({ maxCpuPercent: 100, minDiskFreePercent: 0 });
+    const result = await guard.waitUntilSafe(process.cwd(), { maxWaitMs: 0 });
+    expect(result.snapshot.cpuPercent).toBeTypeOf('number');
+    expect(result.snapshot.cpuPercent!).toBeGreaterThanOrEqual(0);
+    expect(result.snapshot.cpuPercent!).toBeLessThanOrEqual(100);
+  });
+
+  it('still blocks when the host is genuinely saturated', async () => {
+    // The fix must not neuter the gate: real host load has to be detected.
+    const saturate = async (ms: number) => {
+      const end = Date.now() + ms;
+      while (Date.now() < end) Math.sqrt(Math.random() * 1e9);
+    };
+    const load = saturate(1200);
+    try {
+      const guard = new ResourceGuard({ maxCpuPercent: -1, minDiskFreePercent: 0 });
+      const result = await guard.waitUntilSafe(process.cwd(), { maxWaitMs: 0 });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toMatch(/CPU/i);
+    } finally {
+      await load;
+    }
+  });
+
+  it('keeps working when the caller installs fake timers', async () => {
+    // The provider-router suite installs fake timers, which replace
+    // globalThis.setTimeout and freeze Date.now(). A CPU sampler built on
+    // either would stall forever and hang the suite. The sampler must use the
+    // real timer captured at module load.
+    vi.useFakeTimers();
+    try {
+      const guard = new ResourceGuard({ maxCpuPercent: 100, minDiskFreePercent: 0 });
+      const result = await guard.waitUntilSafe(process.cwd(), { maxWaitMs: 0 });
+      expect(result.allowed).toBe(true);
+      expect(result.snapshot.cpuPercent).toBeTypeOf('number');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('parses healthy physical disks and every valid logical drive', () => {

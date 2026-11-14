@@ -4,8 +4,33 @@ import path from 'node:path';
 // Monaco worker bundle, while the root `typescript` package is the tsgo API.
 // The bundle is intentionally used here because this server needs the
 // in-process LanguageService host (definitions, references, diagnostics).
+//
+// That bundle is 8.86 MB. It is loaded LAZILY: the previous eager import
+// made every server start pay the parse cost even though only three
+// retrieval tools (find_definition, find_references, type_diagnostics) ever
+// need it. The type-only import keeps the compiler happy without pulling
+// the module into the startup path.
 // @ts-expect-error Monaco's runtime bundle does not publish a Node declaration file.
-import { typescript as ts } from 'monaco-editor/languages/features/typescript/lib/typescriptServices.js';
+import type * as TsNamespace from 'monaco-editor/languages/features/typescript/lib/typescriptServices.js';
+
+type TypeScriptApi = typeof TsNamespace.typescript;
+
+/** Cached so the 8.86 MB bundle is parsed at most once per process. */
+let typescriptApi: TypeScriptApi | undefined;
+
+/**
+ * Load the Monaco TypeScript runtime on first use.
+ *
+ * Kept in a separate function so the heavy `import()` is not hoisted into
+ * module evaluation time by the bundler.
+ */
+function loadTypeScript(): TypeScriptApi {
+  if (!typescriptApi) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    typescriptApi = require('monaco-editor/languages/features/typescript/lib/typescriptServices.js').typescript;
+  }
+  return typescriptApi;
+}
 import { WorkspaceManager } from './workspace.js';
 
 const CODE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
@@ -33,7 +58,8 @@ export interface SemanticDiagnostic {
   category: 'warning' | 'error' | 'suggestion' | 'message';
 }
 
-function category(value: ts.DiagnosticCategory): SemanticDiagnostic['category'] {
+function category(value: TsNamespace.typescript.DiagnosticCategory): SemanticDiagnostic['category'] {
+  const ts = loadTypeScript();
   return value === ts.DiagnosticCategory.Error ? 'error'
     : value === ts.DiagnosticCategory.Warning ? 'warning'
       : value === ts.DiagnosticCategory.Suggestion ? 'suggestion' : 'message';
@@ -46,7 +72,7 @@ export class TypeScriptLanguageService {
   private readonly workspace: WorkspaceManager;
   private fileNames: string[] = [];
   private versions = new Map<string, string>();
-  private service?: ts.LanguageService;
+  private service?: TsNamespace.typescript.LanguageService;
 
   public constructor(workspace: WorkspaceManager) {
     this.workspace = workspace;
@@ -77,14 +103,15 @@ export class TypeScriptLanguageService {
     return found.sort();
   }
 
-  private ensureService(): ts.LanguageService {
+  private ensureService(): TsNamespace.typescript.LanguageService {
+    const ts = loadTypeScript();
     const files = this.scanFiles();
     const same = files.length === this.fileNames.length && files.every((file, index) => file === this.fileNames[index]);
     if (this.service && same) return this.service;
     this.fileNames = files;
     this.versions = new Map(files.map(file => [file, '0']));
     const root = this.workspace.getRoot();
-    const host: ts.LanguageServiceHost = {
+    const host: TsNamespace.typescript.LanguageServiceHost = {
       getCompilationSettings: () => ({
         target: ts.ScriptTarget.ES2022,
         module: ts.ModuleKind.NodeNext,
@@ -142,7 +169,8 @@ export class TypeScriptLanguageService {
     return rel.replace(/\\/g, '/');
   }
 
-  private location(fileName: string, span: ts.TextSpan, name?: string, kind?: string): SemanticLocation | undefined {
+  private location(fileName: string, span: TsNamespace.typescript.TextSpan, name?: string, kind?: string): SemanticLocation | undefined {
+    const ts = loadTypeScript();
     const filePath = this.relative(fileName);
     if (!filePath) return undefined;
     const source = this.ensureService().getProgram()?.getSourceFile(fileName);
@@ -152,7 +180,8 @@ export class TypeScriptLanguageService {
     return { filePath, line: start.line + 1, column: start.character + 1, endLine: end.line + 1, endColumn: end.character + 1, ...(name ? { name } : {}), ...(kind ? { kind } : {}) };
   }
 
-  private navigate(identifier: string): ts.NavigateToItem[] {
+  private navigate(identifier: string): TsNamespace.typescript.NavigateToItem[] {
+    const ts = loadTypeScript();
     const service = this.ensureService();
     const items = service.getNavigateToItems(identifier.trim(), 100) || [];
     const exact = items.filter((item: any) => item.name === identifier.trim());
@@ -183,6 +212,7 @@ export class TypeScriptLanguageService {
   }
 
   public diagnostics(filePath?: string): SemanticDiagnostic[] {
+    const ts = loadTypeScript();
     const service = this.ensureService();
     const files = filePath ? [path.resolve(this.workspace.getRoot(), filePath)] : this.fileNames.slice(0, 100);
     const result: SemanticDiagnostic[] = [];

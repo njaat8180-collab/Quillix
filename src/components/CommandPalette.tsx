@@ -1,17 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react';
+/**
+ * Command palette UI.
+ *
+ * The state container (provider + hooks + built-in actions) lives in
+ * `CommandPaletteState.tsx` so this component can be loaded on demand via
+ * `React.lazy()` without the bundler reporting an ineffective dynamic import.
+ *
+ * The component markup below is unchanged from the original single-module
+ * implementation — only the module boundary moved.
+ */
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Command as CommandIcon, Search } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-
-export interface CommandPaletteAction {
-  id: string;
-  title: string;
-  description?: string;
-  icon?: React.ReactNode;
-  shortcut?: string;
-  category?: string;
-  onExecute?: () => void;
-  keywords?: string[];
-}
+import {
+  builtInActions,
+  useCommandPaletteContext,
+  type CommandPaletteAction,
+} from './CommandPaletteState.js';
 
 export interface CommandPaletteProps {
   onExecuteAction: (actionId: string) => void;
@@ -23,141 +27,7 @@ export interface CommandPaletteProps {
   onClose?: () => void;
 }
 
-// Internal state shared between hook and component
-interface CommandPaletteState {
-  isOpen: boolean;
-  query: string;
-  selectedIndex: number;
-  customActions: CommandPaletteAction[];
-}
-
-interface CommandPaletteContextValue extends CommandPaletteState {
-  setIsOpen: (open: boolean) => void;
-  setQuery: (query: string) => void;
-  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
-  setCustomActions: (actions: CommandPaletteAction[]) => void;
-  registerAction: (action: CommandPaletteAction) => void;
-  unregisterAction: (actionId: string) => void;
-  open: () => void;
-  close: () => void;
-  executeAction: (actionId: string) => void;
-}
-
-const CommandPaletteContext = createContext<CommandPaletteContextValue | null>(null);
-
-export function useCommandPaletteContext() {
-  const context = useContext(CommandPaletteContext);
-  if (!context) {
-    throw new Error('useCommandPaletteContext must be used within a CommandPaletteProvider');
-  }
-  return context;
-}
-
-export function useCommandPalette() {
-  const context = useContext(CommandPaletteContext);
-  if (!context) {
-    // Return a minimal controller if not in provider
-    return {
-      isOpen: false,
-      open: () => {},
-      close: () => {},
-      registerAction: () => {},
-      unregisterAction: () => {},
-    };
-  }
-  return {
-    isOpen: context.isOpen,
-    open: context.open,
-    close: context.close,
-    registerAction: context.registerAction,
-    unregisterAction: context.unregisterAction,
-  };
-}
-
-function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const [customActions, setCustomActions] = useState<CommandPaletteAction[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const open = useCallback(() => {
-    setIsOpen(true);
-    setQuery('');
-    setSelectedIndex(0);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
-
-  const close = useCallback(() => {
-    setIsOpen(false);
-    setQuery('');
-    setSelectedIndex(0);
-  }, []);
-
-  const registerAction = useCallback((action: CommandPaletteAction) => {
-    setCustomActions(prev => {
-      if (prev.some(a => a.id === action.id)) return prev;
-      return [...prev, action];
-    });
-  }, []);
-
-  const unregisterAction = useCallback((actionId: string) => {
-    setCustomActions(prev => prev.filter(a => a.id !== actionId));
-  }, []);
-
-  const executeAction = useCallback((actionId: string) => {
-    const allActions = [...builtInActions, ...customActions];
-    const action = allActions.find(a => a.id === actionId);
-    if (action && 'onExecute' in action && action.onExecute) {
-      action.onExecute();
-    }
-    close();
-  }, [customActions, close]);
-
-  const value = {
-    isOpen,
-    query,
-    selectedIndex,
-    customActions,
-    setIsOpen,
-    setQuery,
-    setSelectedIndex,
-    setCustomActions,
-    registerAction,
-    unregisterAction,
-    open,
-    close,
-    executeAction,
-  };
-
-  return (
-    <CommandPaletteContext.Provider value={value}>
-      {children}
-    </CommandPaletteContext.Provider>
-  );
-}
-
-const builtInActions = [
-  { id: 'nav.open-workspace', title: 'Open Workspace', description: 'Open a project folder', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+O', category: 'Navigation', keywords: ['open', 'workspace', 'folder', 'project'] },
-  { id: 'nav.file-explorer', title: 'File Explorer', description: 'Show file explorer', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+Shift+E', category: 'Navigation', keywords: ['file', 'explorer', 'tree'] },
-  { id: 'nav.go-to-file', title: 'Go to File', description: 'Quick open file by name', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+P', category: 'Navigation', keywords: ['goto', 'file', 'open'] },
-  { id: 'nav.go-to-symbol', title: 'Go to Symbol', description: 'Navigate to symbol in workspace', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+T', category: 'Navigation', keywords: ['goto', 'symbol', 'navigate'] },
-  { id: 'editor.new-file', title: 'New File', description: 'Create a new file', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+N', category: 'Editor', keywords: ['new', 'file', 'create'] },
-  { id: 'editor.save', title: 'Save File', description: 'Save the active file', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+S', category: 'Editor', keywords: ['save', 'write'] },
-  { id: 'editor.toggle-terminal', title: 'Toggle Terminal', description: 'Show/hide integrated terminal', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+', category: 'Editor', keywords: ['terminal', 'console', 'shell'] },
-  { id: 'editor.toggle-sidebar', title: 'Toggle Sidebar', description: 'Show/hide sidebar', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+B', category: 'Editor', keywords: ['sidebar', 'toggle', 'panel'] },
-  { id: 'editor.command-palette', title: 'Command Palette', description: 'Show all commands', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+Shift+P', category: 'Editor', keywords: ['command', 'palette', 'commands'] },
-  { id: 'ai.inline-prompt', title: 'Inline AI Prompt', description: 'Trigger inline AI completion', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+K', category: 'AI', keywords: ['ai', 'inline', 'prompt', 'complete'] },
-  { id: 'ai.chat', title: 'AI Chat', description: 'Open AI chat panel', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+L', category: 'AI', keywords: ['ai', 'chat', 'assistant'] },
-  { id: 'project.run', title: 'Run Project', description: 'Run the project', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'F5', category: 'Project', keywords: ['run', 'start', 'execute'] },
-  { id: 'project.build', title: 'Build Project', description: 'Build the project', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+Shift+B', category: 'Project', keywords: ['build', 'compile'] },
-  { id: 'project.test', title: 'Run Tests', description: 'Run project tests', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+Shift+T', category: 'Project', keywords: ['test', 'testing'] },
-  { id: 'project.create', title: 'Create Project', description: 'Create a new project', icon: React.createElement(CommandIcon, { size: 14 }), category: 'Project', keywords: ['create', 'new', 'project', 'scaffold'] },
-  { id: 'project.settings', title: 'Project Settings', description: 'Open project settings', icon: React.createElement(CommandIcon, { size: 14 }), category: 'Project', keywords: ['settings', 'config', 'preferences'] },
-  { id: 'settings.open', title: 'Open Settings', description: 'Open application settings', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+,', category: 'Settings', keywords: ['settings', 'preferences', 'options'] },
-  { id: 'help.shortcuts', title: 'Keyboard Shortcuts', description: 'View all keyboard shortcuts', icon: React.createElement(CommandIcon, { size: 14 }), shortcut: 'Ctrl+K Ctrl+S', category: 'Help', keywords: ['shortcuts', 'keys', 'keybindings', 'help'] },
-];
+export type { CommandPaletteAction } from './CommandPaletteState.js';
 
 export function CommandPalette(props: CommandPaletteProps) {
   const { onExecuteAction, customActions = [], workspaceRoot, activeFile, hasActiveProject } = props;
@@ -307,4 +177,6 @@ export function CommandPalette(props: CommandPaletteProps) {
   );
 }
 
-export { CommandPaletteProvider };
+// The provider now lives in CommandPaletteState.tsx. Re-exported here so
+// existing importers of `CommandPaletteProvider` keep working.
+export { CommandPaletteProvider } from './CommandPaletteState.js';

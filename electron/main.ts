@@ -19,6 +19,14 @@ import { app, BrowserWindow, dialog, shell, ipcMain } from 'electron';
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { installFaultReporter } from '../src/server/faultReporter.js';
+import {
+  RENDERER_CSP,
+  SECURITY_HEADERS,
+  isLocalAppUrl as isLocalAppUrlPolicy,
+  isPermissionAllowed,
+  isTrustedIpcSender as isTrustedIpcSenderPolicy,
+} from './security.js';
 
 const HOST = '127.0.0.1';
 
@@ -45,6 +53,26 @@ const PORT = resolvePort();
 const APP_URL = `http://${HOST}:${PORT}`;
 const READY_TIMEOUT_MS = 45000;
 
+/**
+ * True when the URL belongs to this app's local server.
+ *
+ * Delegates to the shared security policy so the app and the security
+ * contract test can never disagree about what "local" means.
+ */
+function isLocalAppUrl(url: string): boolean {
+  return isLocalAppUrlPolicy(url, HOST, PORT);
+}
+
+/**
+ * True when the IPC sender is our own renderer.
+ *
+ * Delegates to the shared security policy so the app and the security
+ * contract test can never disagree about what "trusted" means.
+ */
+function isTrustedIpcSender(event: Electron.IpcMainInvokeEvent): boolean {
+  return isTrustedIpcSenderPolicy(event, HOST, PORT);
+}
+
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
 let ownsServerProcess = false; // true only if THIS instance spawned the server
@@ -64,14 +92,6 @@ function log(...args: unknown[]): void {
 /* ------------------------------------------------------------------ */
 /* Local server management                                             */
 /* ------------------------------------------------------------------ */
-
-/** True if the URL belongs to this app's local server. */
-function isLocalAppUrl(url: string): boolean {
-  return (
-    url.startsWith(`${APP_URL}/`) || url === APP_URL ||
-    url.startsWith(`http://localhost:${PORT}/`) || url === `http://localhost:${PORT}`
-  );
-}
 
 /** Fetch helper with a short timeout (main-process fetch). */
 async function fetchJson(url: string, timeoutMs = 1500): Promise<any | null> {
@@ -233,19 +253,31 @@ async function waitForServer(): Promise<boolean> {
 }
 
 function stopServerProcess(): void {
-  if (serverProcess && ownsServerProcess) {
-    log('stopping NUVRO AI server...');
-    try {
-      const child = serverProcess;
-      // Detach exit handling so quit is not interrupted.
-      serverProcess = null;
-      ownsServerProcess = false;
-      child.removeAllListeners('exit');
-      child.kill();
-    } catch (err) {
-      log('error stopping server:', err);
-    }
+  const child = serverProcess;
+  if (!child || !ownsServerProcess) return;
+  log('stopping NUVRO AI server...');
+  // Detach exit handling so quit is not interrupted.
+  serverProcess = null;
+  ownsServerProcess = false;
+  try {
+    child.removeAllListeners('exit');
+  } catch {
+    // Listener cleanup is best-effort; never block shutdown on it.
   }
+  try {
+    child.kill();
+  } catch (err) {
+    log('error stopping server:', err);
+    return;
+  }
+  // Graceful first, then force. Without the escalation a child that ignores
+  // SIGTERM (a wedged Node server mid-request) keeps the app alive: the quit
+  // sequence stalls behind a process nobody is waiting on.
+  setTimeout(() => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    log('server child did not exit on SIGTERM — sending SIGKILL');
+    try { child.kill('SIGKILL'); } catch { /* already gone */ }
+  }, 5000).unref();
 }
 
 /* ------------------------------------------------------------------ */
@@ -280,7 +312,11 @@ function appIconPath(): string {
  * through the local server API — the main process never touches the
  * workspace itself.
  */
-ipcMain.handle('dialog:select-folder', async (): Promise<string | null> => {
+ipcMain.handle('dialog:select-folder', async (event): Promise<string | null> => {
+  if (!isTrustedIpcSender(event)) {
+    log('rejected dialog:select-folder from an untrusted sender');
+    return null;
+  }
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
@@ -293,13 +329,20 @@ ipcMain.handle('dialog:select-folder', async (): Promise<string | null> => {
 });
 
 // Small, explicit window-control bridge for the renderer title controls.
-ipcMain.handle('window:minimize', () => { mainWindow?.minimize(); return true; });
-ipcMain.handle('window:toggle-maximize', () => {
+ipcMain.handle('window:minimize', (event) => {
+  if (!isTrustedIpcSender(event)) return false;
+  mainWindow?.minimize();
+  return true;
+});
+ipcMain.handle('window:toggle-maximize', (event) => {
+  if (!isTrustedIpcSender(event)) return false;
   if (!mainWindow) return false;
   if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize();
   return mainWindow.isMaximized();
 });
-ipcMain.handle('window:is-maximized', () => Boolean(mainWindow?.isMaximized()));
+ipcMain.handle('window:is-maximized', (event) =>
+  isTrustedIpcSender(event) ? Boolean(mainWindow?.isMaximized()) : false,
+);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -324,6 +367,21 @@ function createWindow(): void {
     },
   });
 
+  // Lock the renderer down with a strict CSP and the usual hardening headers.
+  // These are applied on the session so every response the local server
+  // returns to the renderer carries them, including error pages.
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [RENDERER_CSP],
+        ...Object.fromEntries(
+          Object.entries(SECURITY_HEADERS).map(([name, value]) => [name, [value]]),
+        ),
+      },
+    });
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
     // NUVRO AI starts minimized by default so a background coding workspace
@@ -336,6 +394,27 @@ function createWindow(): void {
   mainWindow.webContents.on('did-finish-load', () => {
     log('NUVRO AI UI loaded');
   });
+
+  // Permission hardening: deny by default, then allow only the single
+  // permission the renderer actually uses.
+  //
+  // The renderer calls navigator.clipboard.writeText() in ChatView,
+  // CodebaseQA, CrashBoundary and TerminalPanel. Nothing in the app touches
+  // the camera, microphone, geolocation, notifications or media devices, so
+  // every other permission is refused outright. Without this handler
+  // Electron's default is to auto-approve some permission requests, which
+  // would let a compromised or malicious renderer content request device
+  // access without any user prompt.
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    const allowed = isPermissionAllowed(permission);
+    if (!allowed) log('blocked permission request:', permission);
+    callback(allowed);
+  });
+
+  // Permission checks are also issued separately from the request flow.
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) =>
+    isPermissionAllowed(permission),
+  );
 
   // Keep the app local: block in-window navigation away from the local server.
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -439,3 +518,48 @@ if (!gotLock) {
     });
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Fault visibility (do not swallow)                                   */
+/* ------------------------------------------------------------------ */
+
+// These handlers exist to REPORT faults, never to hide them. Without them an
+// unhandled rejection in the main process is silent in the console and leaves
+// the user with a window that behaves oddly for no visible reason.
+//
+// Policy:
+//   - Unhandled rejection -> report and keep serving (state is still defined).
+//   - Uncaught exception  -> FATAL. The main process was in an undefined
+//     state, so it must not keep driving the window or the server child.
+//     The app shuts down gracefully (server child stopped, error surfaced to
+//     the user) and exits with a non-zero code.
+installFaultReporter({
+  label: '[nuvro-ai]',
+  log: (message, error) => console.error(message, error ?? ''),
+  onFatalError: () => {
+    // Stop the server child first so no orphaned server survives the crash.
+    try {
+      stopServerProcess();
+    } catch (err) {
+      console.error('[nuvro-ai] error stopping server during fatal cleanup:', err);
+    }
+    appIsQuitting = true;
+    // Surface the failure to the user instead of a silent close. The dialog
+    // is best-effort: if no window exists yet, the log is the only channel.
+    try {
+      dialog.showErrorBox(
+        'NUVRO AI stopped unexpectedly',
+        'An unrecoverable error occurred in the desktop process.\r\n\r\n' +
+          'The local server was stopped to avoid operating on an inconsistent state.\r\n' +
+          'See the console log for the full stack trace.'
+      );
+    } catch {
+      // best effort
+    }
+    // Non-zero exit code so the failure is visible to any supervisor.
+    process.exitCode = 1;
+    app.quit();
+  },
+  fatalCleanupTimeoutMs: 3000,
+  fatalExitCode: 1,
+});

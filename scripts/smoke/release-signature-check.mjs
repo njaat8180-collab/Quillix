@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { releaseSignatureReport } from './release-signature-contract.mjs';
+import { resolveInstaller, resolveUnpackedExecutable } from './release-artifact-names.mjs';
 
 const root = process.cwd();
 const markerPath = path.join(root, '.quillix-smoke', 'package-output.json');
@@ -13,9 +14,12 @@ try {
   if (typeof marker.target === 'string') target = marker.target;
 } catch { /* package marker is optional for a diagnostic-only run */ }
 
-const executable = path.join(outputDir, 'win-unpacked', 'Quillix.exe');
-const installerName = target === 'portable' ? 'Quillix 1.2.0.exe' : 'Quillix Setup 1.2.0.exe';
-const installer = path.join(outputDir, installerName);
+// Resolve the REAL artifact paths from the builder productName. The old
+// hardcoded "Quillix" paths never existed in the current build, so this gate
+// reported every artifact as "Missing" and would have failed a correctly
+// signed release when QUILLIX_REQUIRE_SIGNED_RELEASE=1.
+const executable = resolveUnpackedExecutable(path.join(outputDir, 'win-unpacked'), root);
+const installer = resolveInstaller(outputDir, root, target);
 const required = process.env.QUILLIX_REQUIRE_SIGNED_RELEASE === '1';
 if (process.platform !== 'win32') {
   console.log(JSON.stringify({ ...releaseSignatureReport({ required }), reason: 'Windows Authenticode is only available on Windows.' }));
@@ -72,7 +76,7 @@ if (result.stderr?.trim()) report.stderr = result.stderr.trim();
 if (result.status !== 0 && !report.error) report.error = `PowerShell exited with code ${result.status}`;
 if (result.signal && !report.error) report.error = `PowerShell terminated by ${result.signal}`;
 if (required && report.status !== 'PASS' && !report.error) {
-  report.error = 'Valid Authenticode signatures are required for both the packaged Quillix executable and installer.';
+  report.error = 'Valid Authenticode signatures are required for both the packaged executable and installer.';
 }
 console.log(JSON.stringify({ ...report, executable, installer }));
 if (required && report.status !== 'PASS') process.exit(1);

@@ -4,6 +4,7 @@ import { ProjectMetadata } from '../shared/types.js';
 import { WorkspaceManager } from './workspace.js';
 import { GitService } from './git.js';
 import { SourceContextRetriever } from './sourceContext.js';
+import { readPackageManifest } from './packageManifest.js';
 
 export class CodebaseIndexer {
   private workspace: WorkspaceManager;
@@ -99,7 +100,8 @@ export class CodebaseIndexer {
     const pkgPath = path.join(root, 'package.json');
     if (fs.existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        const pkg = readPackageManifest(root);
+        if (!pkg) throw new Error('unreadable package manifest');
         scripts = pkg.scripts || {};
         dependencies = pkg.dependencies || {};
         devDependencies = pkg.devDependencies || {};

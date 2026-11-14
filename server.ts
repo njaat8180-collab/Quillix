@@ -56,6 +56,7 @@ import { BUILTIN_CODING_PLUGINS } from './src/server/builtinPlugins.js';
 import { SourceContextRetriever } from './src/server/sourceContext.js';
 import { buildInlineCompletionPrompt, cleanInlineCompletion, trimCompletionContext } from './src/shared/inlineCompletion.js';
 import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey } from './src/server/tavilyVerification.js';
+import { installFaultReporter } from './src/server/faultReporter.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -93,6 +94,29 @@ function startSseKeepAlive(res: Response): () => void {
   timer.unref?.();
   return () => clearInterval(timer);
 }
+
+/**
+ * Cleanup hook invoked by the fault reporter before a fatal exit.
+ *
+ * Registered by `startServer()` once the runtime resources exist. An
+ * uncaught exception leaves the process in an undefined state, so the server
+ * must stop serving, abort any in-flight agent task and release child
+ * processes *before* it dies — otherwise a half-applied patch or a
+ * half-written file could be left behind.
+ */
+let fatalCleanup: (() => void | Promise<void>) | null = null;
+
+// Report process-level faults.
+//   - Unhandled rejection → report and keep serving (state is still defined).
+//   - Uncaught exception  → report, clean up, then exit (state is NOT
+//     defined, so continuing to serve risks silent data corruption).
+installFaultReporter({
+  label: '[quillix] [server]',
+  log: (message, error) => console.error(message, error ?? ''),
+  onFatalError: () => fatalCleanup?.(),
+  fatalCleanupTimeoutMs: 3000,
+  fatalExitCode: 1,
+});
 
 async function startServer() {
   const app = express();
@@ -2138,6 +2162,41 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  // Fatal cleanup for an uncaught exception. The fault reporter will exit the
+  // process once this returns; this hook only releases resources and stops
+  // serving so that a half-written file or a half-applied patch is not left
+  // behind by an inconsistent process state.
+  fatalCleanup = () => {
+    console.error('\nQuillix server is shutting down after an uncaught exception...');
+    // Abort any in-flight agent run so no half-applied patch is written.
+    try {
+      activeAgentController?.abort();
+    } catch {
+      // best effort
+    }
+    try {
+      terminalService.killAll();
+      projectRunService.stopAll();
+      toolRegistry.extensions.closeAll();
+    } catch {
+      // best effort
+    }
+    try {
+      previewServerReady = false;
+      previewSessionService.stopAll();
+      previewServer.close();
+    } catch {
+      // best effort
+    }
+    // Stop accepting new requests. In-flight requests are not waited for,
+    // because the process state is undefined; the exit is imminent.
+    try {
+      server.close();
+    } catch {
+      // best effort
+    }
+  };
 
   // Orphan watchdog: when launched by the Electron desktop app, exit if the
   // parent process dies so no NUVRO AI server is left running after a crash

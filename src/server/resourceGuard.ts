@@ -7,6 +7,18 @@ import { isOverdriveActive } from '../shared/overdriveState.js';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Real timer and monotonic clock captured at module load.
+ *
+ * The CPU sampler must keep working when a caller installs fake timers (the
+ * provider-router suite does via vi.useFakeTimers()). Sinon-style fake timers
+ * replace globalThis.setTimeout and freeze Date.now(), so a sampler built on
+ * either would never make progress. Capturing the genuine implementations at
+ * import time keeps the sampler independent of the surrounding test harness.
+ */
+const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+const monotonicNowMs = (): number => Number(process.hrtime.bigint() / 1_000_000n);
+
 export interface ResourceSnapshot {
   cpuPercent?: number;
   memoryUsedPercent: number;
@@ -63,6 +75,14 @@ export function parseWindowsStoragePayload(payload: unknown): ParsedStorageTelem
     logicalDrives,
   };
 }
+
+/**
+ * Wall-clock window used to sample host CPU utilisation.
+ *
+ * os.cpus() counters advance in discrete ticks, so utilisation has to be
+ * measured across a real interval to be meaningful.
+ */
+const CPU_SAMPLE_WINDOW_MS = 150;
 
 const DEFAULT_LIMITS: ResourceLimits = {
   maxCpuPercent: 90,
@@ -122,12 +142,13 @@ export class ResourceGuard {
 
   public getLimits(): ResourceLimits { return { ...this.limits }; }
 
-  public snapshot(workspaceRoot: string): ResourceSnapshot {
+  public snapshot(workspaceRoot: string, cpuPercentOverride?: number): ResourceSnapshot {
     const currentCpu = cpuTimes();
     const totalDelta = currentCpu.total - this.previousCpu.total;
     const idleDelta = currentCpu.idle - this.previousCpu.idle;
     this.previousCpu = currentCpu;
-    const cpuPercent = totalDelta > 0 ? Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100)) : undefined;
+    const cpuPercent = cpuPercentOverride
+      ?? (totalDelta > 0 ? Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100)) : undefined);
     const totalMemory = os.totalmem();
     const memoryFreeBytes = os.freemem();
     const memoryUsedPercent = totalMemory > 0 ? ((totalMemory - memoryFreeBytes) / totalMemory) * 100 : 0;
@@ -177,16 +198,59 @@ export class ResourceGuard {
     options: { signal?: AbortSignal; maxWaitMs?: number; intervalMs?: number; limits?: Partial<ResourceLimits>; getLimits?: () => Partial<ResourceLimits> | Promise<Partial<ResourceLimits>>; onBlocked?: (result: ResourceGateResult) => void | Promise<void> } = {},
   ): Promise<ResourceGateResult> {
     if (isOverdriveActive()) return { allowed: true, snapshot: this.snapshot(workspaceRoot) };
-    const deadline = Date.now() + Math.max(0, options.maxWaitMs ?? 60_000);
-    await this.refreshPhysicalStorageHealth();
-    let result = this.evaluate(workspaceRoot, await options.getLimits?.() || options.limits);
-    while (!result.allowed && Date.now() < deadline && !options.signal?.aborted) {
+    const deadline = monotonicNowMs() + Math.max(0, options.maxWaitMs ?? 60_000);
+
+    // Order matters: CPU is sampled FIRST, over its own dedicated window, and
+    // only then is the Windows storage probe run.
+    //
+    // The storage probe spawns powershell.exe, which is real CPU work. When
+    // the CPU delta was taken across that probe, the guard counted its OWN
+    // telemetry as host load and reported ~99% CPU. That false reading
+    // permanently blocked Windows packaging (package:win aborts with
+    // PAUSED_RESOURCE_GUARD) even though the machine was idle when the build
+    // actually started.
+    let result = await this.evaluateWithFreshSampling(workspaceRoot, (await options.getLimits?.()) || options.limits || {});
+    while (!result.allowed && monotonicNowMs() < deadline && !options.signal?.aborted) {
       await options.onBlocked?.(result);
-      await new Promise<void>(resolve => setTimeout(resolve, Math.max(250, options.intervalMs ?? 5_000)));
-      await this.refreshPhysicalStorageHealth();
-      result = this.evaluate(workspaceRoot, await options.getLimits?.() || options.limits);
+      await new Promise<void>(resolve => realSetTimeout(resolve, Math.max(250, options.intervalMs ?? 5_000)));
+      result = await this.evaluateWithFreshSampling(workspaceRoot, (await options.getLimits?.()) || options.limits || {});
     }
     return result;
+  }
+
+  /**
+   * Evaluate the gate using a CPU sample taken over a dedicated window and a
+   * storage-health refresh that happens afterwards.
+   *
+   * The CPU value therefore describes the host BEFORE the guard did any work,
+   * and never includes the guard's own telemetry.
+   */
+  private async evaluateWithFreshSampling(
+    workspaceRoot: string,
+    limits: Partial<ResourceLimits>,
+  ): Promise<ResourceGateResult> {
+    const cpuPercent = await this.sampleCpuPercent();
+    await this.refreshPhysicalStorageHealth();
+    return this.evaluate(workspaceRoot, limits, this.snapshot(workspaceRoot, cpuPercent));
+  }
+
+  /**
+   * Measure host CPU utilisation over a dedicated wall-clock window.
+   *
+   * os.cpus() counters only advance in discrete ticks, so a ratio taken over
+   * a near-zero window is meaningless. This waits for a short real window
+   * before reading the counters.
+   */
+  private async sampleCpuPercent(windowMs = CPU_SAMPLE_WINDOW_MS): Promise<number | undefined> {
+    const before = cpuTimes();
+    // The window is measured with a monotonic clock and slept with the real
+    // timer captured at module load, so fake timers cannot stall the sampler.
+    await new Promise<void>(resolve => realSetTimeout(resolve, windowMs));
+    const after = cpuTimes();
+    const totalDelta = after.total - before.total;
+    const idleDelta = after.idle - before.idle;
+    if (totalDelta <= 0) return undefined;
+    return Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100));
   }
 
   private async refreshPhysicalStorageHealth(): Promise<void> {

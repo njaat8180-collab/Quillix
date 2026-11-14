@@ -10,6 +10,7 @@ import {
   type AutoTestRunSummary,
 } from '../shared/autoTestOnSave.js';
 import type { SettingsStore } from './settings.js';
+import { readPackageManifest } from './packageManifest.js';
 
 /**
  * M3.4: run the workspace's own check (npm run lint/test) shortly after a save
@@ -55,7 +56,7 @@ export class AutoTestRunner {
     if (root) {
       try {
         const manifestPath = path.join(root, 'package.json');
-        if (fs.existsSync(manifestPath)) packageJson = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (fs.existsSync(manifestPath)) packageJson = readPackageManifest(root);
       } catch {
         packageJson = null;
       }

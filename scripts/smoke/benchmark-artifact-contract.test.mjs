@@ -39,6 +39,22 @@ function runContract(mutator = value => value) {
   }
 }
 
+test('reports an explicit BLOCKED result when the live matrix artifact is absent', () => {
+  // The matrix is a real measured artifact (63 live local-model runs) and is
+  // intentionally git-ignored. Its absence must be reported honestly, never
+  // fabricated into a PASS and never crash the acceptance run with ENOENT.
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'quillix-benchmark-absent-'));
+  try {
+    const result = spawnSync(process.execPath, [contractScript], { cwd, encoding: 'utf8', windowsHide: true });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /"status":"BLOCKED"/);
+    assert.match(result.stdout, /"totalRuns":63/);
+    assert.doesNotMatch(result.stdout, /"status":"PASS"/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test('accepts only a complete v7 model matrix with matching evaluator provenance', () => {
   const result = runContract();
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
