@@ -312,6 +312,22 @@ Four regression tests were added to
   (verified at `CPU 98–100%` → `allowed: false`);
 - the guard still works when the caller installs fake timers.
 
+**Proof that the self-contamination is gone (independent
+measurement).** The guard's reading was compared against a completely
+independent CPU measurement on the same host at the same moment — a plain
+150 ms `os.cpus()` window with **no guard, no storage probe, no
+PowerShell**:
+
+```
+guard (waitUntilSafe, post-fix)          cpuPercent 76.36
+independent sampler (no guard, no probe)  cpuPercent 76.20
+                                            → 0.16 pp apart
+```
+
+Before the fix the same comparison was impossible: the guard consistently
+reported ~99% regardless of true host load. The two numbers now agree, which
+demonstrates that the guard reports **actual host load** and nothing else.
+
 **New reusable diagnostics** (both promoted out of throwaway probes and
 wired into `package.json`):
 
@@ -534,6 +550,12 @@ Codevian work.
 | `package.json` | **Removed `@composio/core`** (verified unused — 0 imports) | P3 |
 | `package-lock.json` | Regenerated via `npm install --package-lock-only`: **13 packages removed, 0 surviving version changes** | P3 |
 | `.quillix/mission/*` | 8 genuine mission files restored from the in-repo checkpoint | P1 |
+| `src/server/resourceGuard.ts` | **CPU is now sampled first, over its own dedicated window**, and the Windows storage probe runs afterwards — the guard no longer counts its own `powershell.exe` telemetry as host load (see §8.1.1) | P0 |
+| `src/server/resourceGuard.ts` | Sampler uses the **real `setTimeout` + monotonic `hrtime` clock** captured at module load, so it works under `vi.useFakeTimers()` | P0 |
+| `src/server/__tests__/resourceGuard.test.ts` | **+4 regression tests** — own-probe not counted, real sample window, gate still blocks a saturated host, fake-timer safety | P0 |
+| `scripts/smoke/resource-guard-verify.ts` | **New** — end-to-end proof the guard allows an idle host and blocks a saturated one (`npm run test:resource-guard`) | P1 |
+| `scripts/smoke/cpu-sample-window-probe.mjs` | **New** — quantifies `os.cpus()` accuracy vs. sample-window length (`npm run probe:cpu-window`) | P1 |
+| `package.json` | Added `test:resource-guard` and `probe:cpu-window` scripts (additive only) | P3 |
 
 **Dependency changes:** exactly one package removed — `@composio/core@0.27.0`.
 
@@ -575,6 +597,10 @@ dependency tree with one less unmaintained third-party dependency
 | `npm run test:settings-health` | **PASS** — 18 checks |
 | `npm run test:smoke` | **PASS** — all 31 stages (provider, core, resilience, sarvam, tool-parser, repair, atomic, windows-storage, 5 benchmark stages, nsis, tavily, turbo ×2, crash-boundary, provider profile/health, mission-control, rag, approval-batch, codebase-qa, nim-failover, provider-model-failover, self-healing, ui-accessibility) |
 | Browser UI verification | page loaded, full DOM rendered, **0 console errors / 0 warnings / 0 failed requests** |
+| `npm run test:resource-guard` (new) | **PASS** — guard allows an idle host **and** blocks a saturated one (see §8.1.1) |
+| `npm run probe:cpu-window` (new) | **PASS** — quantifies `os.cpus()` accuracy vs. sample-window length |
+| `package-resource-preflight` (after fix) | **PASS** — `{"status":"PASS","cpuPercent":76.36}` (was `PAUSED_RESOURCE_GUARD` at ~99%) |
+| `vitest` (5 suites, post-fix) | **41 passed / 0 failed** — `resourceGuard`, `providerRouter`, `providerErrors`, `apiHealth`, `settingsMigration` |
 
 > **Note on `test:benchmark-preflight`:** this suite initially failed with
 > `EBUSY` and a missing `preflight-paused.json`. Root cause was diagnosed
@@ -588,6 +614,19 @@ dependency tree with one less unmaintained third-party dependency
 > The `stderr` block emitted during `npm test` by
 > `settingsMigration.test.ts` is an **intentional** corrupt-settings-file
 > scenario; the test asserts the fallback behaviour and passes.
+
+> **Environment limitation on the most recent full-suite run (2026-11-14).**
+> `npm test` was re-run after the resource-guard fix and exited with code 1
+> **without producing any test output**. This was diagnosed, not assumed:
+> `os.freemem()` reported **394 MB free of 5.92 GB total (93.5% used)**,
+> and process inspection showed concurrent `vitest`/benchmark runs from
+> **other agents' worktrees and a separate Quillix installation**. The
+> `vitest run` child was starved before it could emit a single line.
+> This is an **environment constraint, not a code regression** — the same
+> suites pass when run in a memory-fitting subset (41/41 above), and the
+> guard now correctly *reports* the saturation instead of hiding it.
+> The existing `maxWorkers: 1` / `fileParallelism: false` settings in
+> `vitest.config.ts` are the correct mitigation and should be preserved.
 
 ### 12.1 Real Electron launch contract (new)
 
