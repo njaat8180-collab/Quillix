@@ -333,11 +333,17 @@ The only stderr in the full Vitest run is the *expected* output of
 - Commits:
   - `b8e3cdb` — `fix(agent): repair broken tool contract and harden focused edits`
   - `1790334` — `test(report): cover the whitespace-tolerant edit path end-to-end and document the increment`
-  - (final hash recorded below after the round-2 commit)
+  - `7b930f0` — `fix(agent): stop reporting verification failures as success`
 
 ### Round-2 commit
 
 ```
-__COMMIT_HASH__
-__COMMIT_SUBJECT__
+7b930f054eadee478b1172bb7805667c3c42bf20 fix(agent): stop reporting verification failures as success
 ```
+
+Verified after the commit: `git log --format='%H %s' -3` returns the hash
+above, and `git status --short` is empty (clean working tree).
+
+The report file itself was completed with this hash after the commit, so the
+hash above is recorded in the repository's history of the source changes; the
+report text is the final working-tree version.
