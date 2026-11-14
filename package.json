@@ -36,6 +36,7 @@
     "test:token-efficiency": "vitest run src/server/__tests__/conversationCompaction.test.ts src/server/__tests__/projectRag.test.ts --pool=forks --maxWorkers=1 --isolate=false",
     "benchmark:tavily": "tsx scripts/smoke/tavily-verification-benchmark.ts",
     "demo:tavily": "tsx scripts/smoke/tavily-hackathon-demo.ts",
+    "demo:readiness": "node scripts/smoke/hackathon-demo-gate.mjs",
     "test:live-tavily": "tsx scripts/smoke/live-tavily.ts",
     "test:verification-http": "node scripts/smoke/verification-http.mjs",
     "test:website-behavior": "tsx scripts/smoke/website-behavior-check.ts",
@@ -149,3 +150,4 @@
     "vitest": "^5.0.1"
   }
 }
+
