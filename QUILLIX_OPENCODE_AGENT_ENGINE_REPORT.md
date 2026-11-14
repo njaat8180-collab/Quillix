@@ -226,6 +226,42 @@ Three harness defects fixed, none of which touches the guard:
 
 The guard itself was **not** relaxed, overridden, or disabled anywhere.
 
+### Round 5 — desktop/runtime hardening (no Cline-owned file touched)
+
+Round 5 closed the gap that rounds 1–4 could not: the desktop shell and the local
+HTTP server were the only parts of the product that no agent had hardened. Every
+change below is in a **non-Cline-owned** path (`electron/**`, `server.ts`,
+`vite.config.ts`, `index.html`, `tsconfig.json`, `vitest.config.ts`, `package.json`,
+new `platform/**` and `verification/**` trees, root-level docs). The new logic lives
+in small, pure, unit-tested modules under `platform/` so it can be verified without
+booting Electron or starting a server.
+
+**Defects fixed**
+
+| # | Defect | Impact | Fix |
+|---|--------|--------|-----|
+| 1 | The local-origin guard was registered **after** `express.json({limit:'50mb'})` | A hostile page in the user's browser could make the server parse a 50 MB JSON body before the request was rejected | The guard (`platform/httpSecurity.ts#createLocalApiGuard`) now runs **before** the body parser. Proven live: a foreign `Origin` with a malformed body returns `403` (not `400`), and a foreign `Origin` with an 8 MB body returns `403` |
+| 2 | An unknown `/api` path fell through to the SPA fallback and returned the **HTML app shell with status 200** | A failed API call looked successful to the client | A JSON `404 {success:false,error:'Unknown API endpoint.'}` handler now answers unknown API routes before the SPA fallback. Proven live: `GET /api/does-not-exist` → `404` + JSON |
+| 3 | Express' default error handler leaks stack traces and absolute paths outside production | Internal paths and error internals could reach the browser | `platform/httpSecurity.ts#createApiErrorHandler` is installed as the terminal handler on the API **and** on the preview server. Live probe: malformed JSON → `400 {"success":false,"error":"Malformed JSON request body."}`, no stack |
+| 4 | The renderer had **no Content Security Policy** | No defence in depth against injection in the local app | Strict production CSP as a meta tag **and** a response header (`frame-ancestors 'none'`), plus `X-Content-Type-Options`, `X-Frame-Options` and `Referrer-Policy`. The policy is mode-aware: the Vite dev server gets the React Fast Refresh + HMR variant. Verified in a real browser: production page and dev page both render with **zero console messages** |
+| 5 | Every Electron `ipcMain.handle` accepted messages from any renderer | A page that ended up in the window could open the native folder picker or drive the window | `platform/ipcGuard.ts` verifies the sender origin (and the sub-frame origin when known). Every handler calls `assertTrustedIpcSender(event)`; a contract test asserts handler count == guard count |
+| 6 | Device permissions were never denied | A page could ask for camera/microphone/geolocation | `setPermissionRequestHandler` + `setPermissionCheckHandler` deny everything except clipboard and fullscreen |
+| 7 | Raw server stderr was rendered in a native error dialog | Absolute user paths and possibly credentials appeared on screen | `platform/diagnostics.ts` redacts paths, tokens, API keys, private-key blocks and control characters before the dialog is shown |
+| 8 | The desktop shell accepted a `PORT` the server rejects (`3000.5`, `70000`, `abc`) | Endless "server never became ready" with no explanation | One shared port contract (`platform/portConfig.ts`) used by both the shell and the server; an invalid value now fails fast with an actionable message |
+| 9 | The Electron main process was **not type-checked at all** (`tsconfig.json` excluded `electron`) | A type error in the desktop shell could not fail the build | `electron/`, `platform/` and `verification/` are now part of `tsc --noEmit` |
+| 10 | A `<webview>` could be attached to the renderer | A hostile page could spawn an unsandboxed child view | The `will-attach-webview` event is now cancelled |
+
+**New test surface (47 assertions, `npm run test:security`)**
+
+`verification/portConfig.test.ts`, `verification/diagnostics.test.ts`,
+`verification/ipcGuard.test.ts`, `verification/httpSecurity.test.ts`,
+`verification/csp.test.ts`, `verification/securityContract.test.ts`.
+
+They are part of `npm test` (the main gate) and are also wired into `npm run
+test:smoke` as `test:security`. Two of them caught real defects in the first
+implementation (a quoted JSON secret was not redacted, and the truncation path was
+masked by the opaque-token rule); both were fixed rather than the assertion relaxed.
+
 ---
 
 ## 5. Files modified
@@ -255,6 +291,20 @@ The guard itself was **not** relaxed, overridden, or disabled anywhere.
 | `scripts/smoke/tavily-hackathon-demo.test.mjs` | Child timeout 20 s → 60 s (assertions unchanged) |
 | `scripts/smoke/release-source-fingerprint.test.mjs` | Artifact re-check timeout 10 s → 30 s (assertions unchanged) |
 | `package.json` | New `test:release-artifact-names` script, wired into the `test:smoke` chain |
+| `platform/portConfig.ts` | **New (round 5)** — one port contract for the desktop shell and the server |
+| `platform/diagnostics.ts` | **New (round 5)** — secret/path redaction for the native error dialog |
+| `platform/ipcGuard.ts` | **New (round 5)** — Electron IPC sender validation |
+| `platform/httpSecurity.ts` | **New (round 5)** — local-origin guard + terminal JSON error handler |
+| `platform/csp.ts` | **New (round 5)** — renderer Content Security Policy builder and meta-tag injection |
+| `electron/main.ts` | **Round 5** — shared port contract, permission guards, IPC sender validation, redacted diagnostics, webview guard |
+| `server.ts` | **Round 5** — guard before the body parser, JSON 404 for unknown API routes, terminal error handler (API + preview), security headers and CSP header |
+| `vite.config.ts` | **Round 5** — mode-aware CSP injection plugin |
+| `index.html` | **Round 5** — CSP meta tag |
+| `tsconfig.json` | **Round 5** — `electron/`, `platform/`, `verification/` are now type-checked |
+| `vitest.config.ts` | **Round 5** — `verification/**/*.test.ts` added to the main suite |
+| `package.json` | **Round 5** — `test:security` script, wired into the `test:smoke` chain |
+| `verification/*.test.ts` | **New (round 5)** — 47 security/reliability assertions across 6 files |
+| `QUILLIX_CLINE_COORDINATION_PACKAGE.md` | **New (round 5)** — the Cline review package (M9.6 spec + patch proposal, M2.5/M5.7 tracker sync, security-review handover) |
 | `QUILLIX_OPENCODE_AGENT_ENGINE_REPORT.md` | This report |
 | `_checkpoints/OPENCODE-ENGINE-20261113-233700/`, `_checkpoints/OPENCODE-ENGINE-20261114-043000/` | Checkpoint snapshots of the edited files |
 
@@ -317,6 +367,26 @@ was not observed.
 The only stderr in the full Vitest run is the *expected* output of
 `settingsMigration.test.ts > a corrupt settings file falls back to defaults`
 (a deliberate corrupt-JSON fixture); it is not a failure.
+
+### Round-5 results (desktop/runtime hardening)
+
+| Command | Result |
+|---------|--------|
+| `npm run lint` | **EXIT 0** — `tsc --noEmit`, zero diagnostics; `electron/`, `platform/`, `verification/` are now type-checked for the first time |
+| `npm test` | **EXIT 0 — 91 files passed, 911 tests passed, 0 failed** (864 pre-existing + 47 new security/reliability assertions) |
+| `npm run build` | **EXIT 0** — Vite bundle + esbuild `dist/server.cjs` (1.2 MB) + `dist/electron/main.cjs` (18.7 KB) + preload |
+| `npm run test:security` | **EXIT 0 — 6 files, 47/47** (new suite) |
+| `npm run test:smoke` | **EXIT 0** — full chain green, now including the new `test:security` step |
+| `npm run test:agent-e2e` | **EXIT 0 — 66 passed, 0 failed**, `ALL AGENT E2E CHECKS PASSED` |
+| `npm run test:memory-hygiene` | **EXIT 0 — `{"status":"PASS", ...}`** |
+| `npm run test:coverage` | **EXIT 0** — 91 files / 911 tests. Coverage: all files **76.49 %** stmts / 70.15 % branch / 78.11 % funcs / **80.99 %** lines; `src/server` 77.61 / 70.58 / 80.79 / 82.37; `src/shared` 93.62 / 86.43 / 93.10 / 97.42; new `platform/` **97.29 / 91.66 / 100 / 98.30** |
+| `npm run test:acceptance:safe` | **EXIT 1 — FAILED at `test:website-behavior`** with `ENOENT ... test\qwen-ecommerce-WxPTxO\behavior-report.json`. Root cause: the gate expects a **gitignored local fixture** (`.gitignore:26` `test/qwen-*/`, `.gitignore:48` `test/*/`) that this worktree never had; the script never creates it. After provisioning the fixture locally from the main checkout, `npm run test:website-behavior` → **EXIT 0**, `"allOk": true`. A full acceptance re-run was **started** and was still running when this checkpoint was taken — it is reported as *started, not completed*, no PASS is claimed. The durable fix already exists on `agent-codevian` @ `6f7cbc9` (self-provisioning fixture) and is listed in the coordination package. |
+| `npm run package:win` / installer / signing | **NOT RUN** — explicitly excluded from this round. Consequently the pre-existing installer is now **stale** (round 5 changed fingerprint inputs: `server.ts`, `index.html`, `vite.config.ts`, `package.json`, `tsconfig.json`, `electron/**`); `test:release-artifact` is expected to report that. No rebuild was attempted and no workaround was applied. |
+
+**Budget-only change:** `vitest.config.ts` `testTimeout`/`hookTimeout` 30 s → 60 s.
+The coverage-instrumented run needs ~34 s for the slowest native-command test in
+`codingWorkflow.test.ts`; the same file passes **39/39 in 96.95 s** in isolation
+without coverage. No assertion was changed, removed or relaxed.
 
 ### Smoke-suite detail (each suite executed individually)
 

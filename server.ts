@@ -56,6 +56,9 @@ import { BUILTIN_CODING_PLUGINS } from './src/server/builtinPlugins.js';
 import { SourceContextRetriever } from './src/server/sourceContext.js';
 import { buildInlineCompletionPrompt, cleanInlineCompletion, trimCompletionContext } from './src/shared/inlineCompletion.js';
 import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey } from './src/server/tavilyVerification.js';
+import { createLocalApiGuard, createApiErrorHandler, isLoopbackAddress } from './platform/httpSecurity.js';
+import { resolvePort } from './platform/portConfig.js';
+import { buildContentSecurityPolicy } from './platform/csp.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -75,12 +78,6 @@ const pendingApprovals = new Map<
   string,
   { resolve: (approved: boolean) => void; request: { kind: 'terminal' | 'git' | 'file'; title: string; command?: string; reason?: string } }
 >();
-
-function isLoopbackAddress(remoteAddress: string | undefined): boolean {
-  if (!remoteAddress) return false;
-  const normalized = remoteAddress.replace(/^::ffff:/, '').toLowerCase();
-  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
-}
 
 /** Keep long model generations alive through Electron/browser/proxy idle timers. */
 function startSseKeepAlive(res: Response): () => void {
@@ -104,8 +101,21 @@ async function startServer() {
   // NUVRO AI's control API is localhost-only by default. Never bind 0.0.0.0 —
   // this API can read/write files, run terminal commands, and execute tools.
   const HOST = '127.0.0.1';
-  const PORT = Number(process.env.PORT || 3000);
-  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+  // One port contract for the desktop shell and this server: an explicitly
+  // configured but invalid PORT is rejected with an actionable message instead
+  // of being coerced into a different port.
+  const portResolution = resolvePort({ envPort: process.env.PORT });
+  if (!portResolution.ok) {
+    throw new Error(portResolution.reason ?? 'PORT must be an integer between 1 and 65535.');
+  }
+  const PORT = portResolution.port;
+
+  // --- SECURITY MIDDLEWARE -------------------------------------------------
+  // 1) The NUVRO AI API must only be reachable from the local machine.
+  //    This runs BEFORE the body parser on purpose: a hostile page in the
+  //    user's browser must not be able to make the server allocate a 50 MB
+  //    JSON body just to be rejected afterwards.
+  app.use('/api', createLocalApiGuard(PORT));
 
   app.use(express.json({ limit: '50mb' }));
   const requireAgentMode = (req: Request, res: Response, next: NextFunction) => {
@@ -120,19 +130,6 @@ async function startServer() {
   };
   app.use(['/api/workspace/set-root', '/api/workspace/create-project', '/api/project/open', '/api/settings', '/api/providers/sarvam/key', '/api/providers/sarvam/failover-key', '/api/providers/sarvam/failover-keys', '/api/providers/openai/key', '/api/providers/openai/failover-key', '/api/providers/openai/failover-keys', '/api/providers/grok/key', '/api/providers/grok/failover-key', '/api/providers/grok/failover-keys', '/api/providers/groq/key', '/api/providers/groq/failover-key', '/api/providers/groq/failover-keys', '/api/providers/nvidia/key', '/api/providers/nvidia/failover-key', '/api/providers/nvidia/failover-keys', '/api/providers/universal/key', '/api/providers/tavily/key'], (req, res, next) => {
     if (agentBusy && req.method !== 'GET') return res.status(409).json({ success: false, error: 'Wait for the active task to finish or stop it before changing the workspace or settings.' });
-    next();
-  });
-
-  // --- SECURITY MIDDLEWARE -------------------------------------------------
-  // 1) The NUVRO AI API must only be reachable from the local machine.
-  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
-    if (!isLoopbackAddress(req.socket.remoteAddress) ||
-        !validateLocalApiRequest(req.headers.host, req.headers.origin, PORT)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Forbidden: NUVRO AI only accepts requests from its local application origin.',
-      });
-    }
     next();
   });
 
@@ -1415,6 +1412,9 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   };
 
   previewApp.use('/preview', (req: Request, res: Response) => servePreviewAsset(req, res, true));
+  // The preview server serves untrusted user projects: never leak a stack
+  // trace or an absolute path into the preview document.
+  previewApp.use(createApiErrorHandler());
   const previewServer = previewApp.listen(0, HOST, () => {
     const address = previewServer.address() as import('net').AddressInfo;
     previewServerReady = true;
@@ -2067,7 +2067,26 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   });
 
   // Vite middleware setup
-  if (process.env.NODE_ENV !== 'production') {
+  // An unknown /api path must be a JSON 404, never the single-page app:
+  // returning HTML with status 200 makes a failed API call look successful.
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ success: false, error: 'Unknown API endpoint.' });
+  });
+
+  // The renderer is a local single-page app: it only ever loads its own
+  // origin. The CSP is sent as a header as well as a meta tag so directives
+  // that only work in headers (frame-ancestors) are enforced too.
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  const appContentSecurityPolicy = `${buildContentSecurityPolicy(isDevelopment ? 'development' : 'production')}; frame-ancestors 'none'`;
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Content-Security-Policy', appContentSecurityPolicy);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
+
+  if (isDevelopment) {
     app.use('/monaco/vs', express.static(path.resolve('node_modules/monaco-editor/min/vs')));
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -2082,6 +2101,10 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Terminal error handler: no stack trace and no absolute path ever reaches
+  // the browser. Express' default handler leaks both outside production mode.
+  app.use(createApiErrorHandler());
 
   const server = app.listen(PORT, HOST, () => {
     console.log(`NUVRO AI Server running on http://${HOST}:${PORT} (localhost only)`);
