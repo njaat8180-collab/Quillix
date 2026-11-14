@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { listPackage, extractFile } from '@electron/asar';
+import { releaseArtifactNames, firstExistingArtifact } from './release-artifact-names.mjs';
 
 const project = path.resolve(import.meta.dirname, '../..');
 const packager = fs.readFileSync(path.join(project, 'scripts', 'smoke', 'package-win.mjs'), 'utf8');
@@ -17,9 +18,14 @@ try {
 } catch { /* fall back to the standard release directory */ }
 const unpacked = path.join(release, 'win-unpacked');
 const asar = path.join(unpacked, 'resources', 'app.asar');
-const installerName = target === 'portable' ? 'Quillix 1.2.0.exe' : 'Quillix Setup 1.2.0.exe';
-const installer = path.join(release, installerName);
-assert.ok(fs.existsSync(path.join(unpacked, 'Quillix.exe')), 'unpacked Quillix executable is missing');
+// The artifact names must come from the same configuration the packager uses
+// (electron-builder.json -> productName), otherwise the gate rejects a
+// correctly built artifact as soon as the product name changes.
+const artifactNames = releaseArtifactNames(project);
+const installerName = target === 'portable' ? artifactNames.portable[0] : artifactNames.nsis[0];
+const installer = firstExistingArtifact(release, target === 'portable' ? artifactNames.portable : artifactNames.nsis);
+const executable = firstExistingArtifact(unpacked, artifactNames.executable);
+assert.ok(fs.existsSync(executable), 'unpacked Quillix executable is missing');
 assert.ok(fs.statSync(installer).size > 10 * 1024 * 1024, 'installer is unexpectedly small');
 assert.ok(fs.statSync(asar).size > 10 * 1024 * 1024, 'app.asar is unexpectedly small');
 

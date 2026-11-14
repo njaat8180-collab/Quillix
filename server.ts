@@ -59,6 +59,13 @@ import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey 
 import { createLocalApiGuard, createApiErrorHandler, isLoopbackAddress } from './platform/httpSecurity.js';
 import { resolvePort } from './platform/portConfig.js';
 import { buildContentSecurityPolicy } from './platform/csp.js';
+import {
+  acquireWorkspaceLease,
+  renewWorkspaceLease,
+  releaseWorkspaceLease,
+  readWorkspaceLease,
+  DEFAULT_LEASE_TTL_MS,
+} from './platform/workspaceLease.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -151,6 +158,51 @@ async function startServer() {
       ? initialSettings.workspaceRoot
       : process.cwd();
   const workspaceManager = new WorkspaceManager(initialWorkspaceRoot);
+  // M9.6: concurrent workspace safety. Only one NUVRO AI instance may write
+  // to a workspace at a time. The lease lives in the workspace's own
+  // `.quillix/` folder (already git-ignored) and is arbitrated by an
+  // exclusive file create, so two racing processes cannot both win it.
+  const workspaceLeaseOwnerId = `quillix-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+  let workspaceLeaseRoot = workspaceManager.getRoot();
+  let workspaceLeaseHeld = false;
+  const acquireWorkspaceLeaseFor = (root: string): { ok: boolean; error?: string } => {
+    const result = acquireWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
+    if (!result.acquired) return { ok: false, error: result.error };
+    workspaceLeaseRoot = root;
+    workspaceLeaseHeld = true;
+    return { ok: true };
+  };
+  const releaseWorkspaceLeaseFor = (root: string) => {
+    if (!workspaceLeaseHeld) return;
+    releaseWorkspaceLease({ root, ownerId: workspaceLeaseOwnerId });
+    workspaceLeaseHeld = false;
+  };
+  // Take the lease before the server accepts a single request. A second
+  // instance on the same workspace fails fast with an actionable message
+  // instead of corrupting the user's files.
+  {
+    const startupLease = acquireWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
+    if (!startupLease.acquired) {
+      console.error(
+        `\nQuillix could not start: ${startupLease.error || 'the workspace is already in use.'}\n` +
+          `Two instances writing to the same folder would overwrite each other's work.\n` +
+          `Stop the other instance, or start this one with a different workspace folder.\n`
+      );
+      process.exit(1);
+    }
+    workspaceLeaseHeld = true;
+  }
+  // Renew the lease while the server is alive. If the lease was taken over
+  // (this instance was frozen long enough for it to expire), say so loudly.
+  const workspaceLeaseHeartbeat = setInterval(() => {
+    if (!workspaceLeaseHeld) return;
+    const renewed = renewWorkspaceLease({ root: workspaceLeaseRoot, ownerId: workspaceLeaseOwnerId });
+    if (!renewed.acquired) {
+      console.error(`Quillix workspace lease lost: ${renewed.error || 'another instance took the workspace.'}`);
+    }
+  }, Math.max(5_000, Math.floor(DEFAULT_LEASE_TTL_MS / 3)));
+  workspaceLeaseHeartbeat.unref?.();
+
   const terminalService = new TerminalService();
   const gitService = new GitService(terminalService);
   // One agent task = one git branch (Cursor-style). Remembers the base branch
@@ -937,6 +989,14 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
   app.post('/api/workspace/set-root', async (req: Request, res: Response) => {
     const { targetPath } = req.body;
     if (!targetPath) return res.status(400).json({ success: false, error: 'targetPath required' });
+    // M9.6: take the lease for the target folder BEFORE switching. If another
+    // instance already owns it, refuse the switch instead of leaving two
+    // instances writing to the same folder.
+    const previousRoot = workspaceLeaseRoot;
+    const lease = acquireWorkspaceLeaseFor(targetPath);
+    if (!lease.ok) {
+      return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
+    }
     const result = workspaceManager.setRoot(targetPath);
     // Persist the selected workspace so it is restored on the next start.
     if (result.success) {
@@ -945,8 +1005,26 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
+      // The old workspace is no longer ours.
+      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
+    } else {
+      // The switch failed: give the target folder back.
+      releaseWorkspaceLeaseFor(targetPath);
+      workspaceLeaseHeld = workspaceLeaseRoot === previousRoot;
     }
     res.json(result);
+  });
+
+  // Workspace - lease status (M9.6). Lets the UI show who owns the folder.
+  app.get('/api/workspace/lease', (_req: Request, res: Response) => {
+    const lease = readWorkspaceLease(workspaceLeaseRoot);
+    res.json({
+      success: true,
+      ownerId: workspaceLeaseOwnerId,
+      root: workspaceLeaseRoot,
+      held: workspaceLeaseHeld && lease?.ownerId === workspaceLeaseOwnerId,
+      lease: lease ? { ownerId: lease.ownerId, ownerPid: lease.ownerPid, ownerHost: lease.ownerHost, acquiredAt: lease.acquiredAt, heartbeatAt: lease.heartbeatAt, expiresAt: lease.expiresAt } : null,
+    });
   });
 
   // ---- TASKS (§21 — persistent task memory / resume) -----------------------
@@ -1046,8 +1124,16 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
         return res.status(409).json({ success: false, error: `Folder already exists: ${projectDir}` });
       }
       fs.mkdirSync(projectDir, { recursive: true });
+      // M9.6: the freshly created folder is ours to take, but the lease is
+      // still acquired explicitly so the invariant holds on every path.
+      const previousRoot = workspaceLeaseRoot;
+      const lease = acquireWorkspaceLeaseFor(projectDir);
+      if (!lease.ok) {
+        return res.status(409).json({ success: false, error: lease.error || 'The workspace is already in use.' });
+      }
       const result = workspaceManager.setRoot(projectDir);
       if (!result.success) {
+        releaseWorkspaceLeaseFor(projectDir);
         return res.status(500).json({ success: false, error: result.error });
       }
       await toolRegistry.setWorkspaceRoot(result.path);
@@ -1055,6 +1141,7 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       projectMemory.rebind(result.path);
       taskStateStore.rebind(result.path);
       projectRag.rebind(result.path);
+      if (previousRoot && previousRoot !== result.path) releaseWorkspaceLeaseFor(previousRoot);
       res.json({ success: true, path: result.path });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -2155,6 +2242,9 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
     previewServerReady = false;
     previewSessionService.stopAll();
     previewServer.close();
+    // M9.6: hand the workspace back so another instance can start cleanly.
+    clearInterval(workspaceLeaseHeartbeat);
+    releaseWorkspaceLeaseFor(workspaceLeaseRoot);
     server.close(() => process.exit(0));
     // Safety net if close hangs on open keep-alive connections.
     setTimeout(() => process.exit(0), 2000).unref();
