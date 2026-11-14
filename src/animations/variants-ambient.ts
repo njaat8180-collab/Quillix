@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - Ambient & Background Effects
+// QUILLIX Animation Variants - Ambient & Background Effects
 // Subtle atmospheric animations: particles, gradients, grids, glows
 // All respect prefers-reduced-motion
 

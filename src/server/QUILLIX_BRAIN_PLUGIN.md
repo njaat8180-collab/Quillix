@@ -1,6 +1,6 @@
-# NUVRO AI brain plug-in contract
+# QUILLIX brain plug-in contract
 
-NUVRO AI separates the coding body from the model brain. The body owns the
+QUILLIX separates the coding body from the model brain. The body owns the
 workspace, retrieval, file edits, terminal, verification, approvals, rollback,
 memory and UI. A brain only implements the provider contract in `qwen.ts` and
 is registered through `ProviderRouter.registerBrain()`.

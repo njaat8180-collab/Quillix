@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ProjectMemoryRecord, ProjectMemorySnapshot, ProjectProfile, ProjectTaskMemory } from '../shared/types.js';
 
 /**
- * NUVRO AI Project Memory
+ * QUILLIX Project Memory
  * ======================
  * Persistent per-workspace memory of every project the agent created or
  * touched: project root, language, framework, entry point, dependencies, run

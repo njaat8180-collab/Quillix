@@ -1,4 +1,4 @@
-// NUVRO AI Animation System - Main Export
+// QUILLIX Animation System - Main Export
 // Comprehensive animation utilities using Framer Motion
 // Respects prefers-reduced-motion for accessibility
 

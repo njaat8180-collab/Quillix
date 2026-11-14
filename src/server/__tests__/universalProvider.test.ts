@@ -499,7 +499,7 @@ describe('universal provider',()=>{
       expect(events[0].retryAt - events[0].at).toBe(1_000);
     } finally { setOverdriveActive(false); }
   });
-  it('retries a headerless 429 on the minimal floor in Overdrive Mode instead of recording NUVRO AI\'s fallback cooldown', async () => {
+  it('retries a headerless 429 on the minimal floor in Overdrive Mode instead of recording QUILLIX\'s fallback cooldown', async () => {
     setOverdriveActive(true);
     try {
       vi.useFakeTimers();

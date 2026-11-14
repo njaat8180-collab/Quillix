@@ -10,7 +10,7 @@ const baseKey = {
   providerId: 'ollama',
   model: 'qwen2.5-coder:3b',
   endpoint: 'http://localhost:11434',
-  systemInstruction: 'You are NUVRO AI.',
+  systemInstruction: 'You are QUILLIX.',
   prompt: 'explain this function',
   temperature: 0.2,
 };

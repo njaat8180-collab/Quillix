@@ -1,8 +1,8 @@
 # QUILLIX MISSION CONTROL (VS Code extension)
 
-A real VS Code sidebar that shows the NUVRO AI deadline mission, live, from the
+A real VS Code sidebar that shows the QUILLIX deadline mission, live, from the
 repository's persisted goal state — the same `.quillix/mission/goal-state.json`
-that the NUVRO AI Studio panel reads.
+that the QUILLIX Studio panel reads.
 
 ## What it shows
 
@@ -44,7 +44,7 @@ code .
 - Picks up external edits within 15 seconds (poll), and immediately when the
   workspace file changes (file watcher).
 - Refreshes on demand via the toolbar refresh icon or
-  `NUVRO AI: Refresh Mission Control`.
+  `QUILLIX: Refresh Mission Control`.
 
 ## Packaging (when network is available)
 

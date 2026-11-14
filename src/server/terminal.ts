@@ -13,7 +13,7 @@ function terminateProcess(child: ChildProcess): void {
 
 export class TerminalService {
   private activeProcesses: Map<string, ChildProcess> = new Map();
-  /** Rolling log of every command executed through NUVRO AI (agent + user). */
+  /** Rolling log of every command executed through QUILLIX (agent + user). */
   private history: TerminalHistoryEntry[] = [];
 
   /** Returns the most recent executed commands (newest last). */

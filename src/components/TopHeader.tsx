@@ -225,8 +225,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </button>
 
         {window.quillixDesktop && <>
-          <button onClick={() => window.quillixDesktop?.minimize()} className="q-transition p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]" title="Minimize NUVRO AI" aria-label="Minimize NUVRO AI"><Minus size={16} /></button>
-          <button onClick={async () => setMaximized(await window.quillixDesktop!.toggleMaximize())} className="q-transition p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]" title={maximized ? 'Restore NUVRO AI' : 'Maximize NUVRO AI'} aria-label={maximized ? 'Restore NUVRO AI' : 'Maximize NUVRO AI'}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
+          <button onClick={() => window.quillixDesktop?.minimize()} className="q-transition p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]" title="Minimize QUILLIX" aria-label="Minimize QUILLIX"><Minus size={16} /></button>
+          <button onClick={async () => setMaximized(await window.quillixDesktop!.toggleMaximize())} className="q-transition p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]" title={maximized ? 'Restore QUILLIX' : 'Maximize QUILLIX'} aria-label={maximized ? 'Restore QUILLIX' : 'Maximize QUILLIX'}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
         </>}
 
         {/* Settings */}

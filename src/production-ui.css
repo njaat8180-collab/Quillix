@@ -395,6 +395,12 @@ button[style*="var(--accent)"],
 .q-chat-history-delete:hover,
 .q-chat-history-new:hover { background: var(--surface-hover); color: var(--text); }
 .q-user-bubble { color: var(--accent-ink); }
+.q-user-bubble { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+.q-agent-status-strip { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 16px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px; line-height: 1.45; }
+.q-agent-status-strip > * { min-width: 0; max-width: 100%; }
+.q-agent-status-strip > div:first-child { display: flex; flex: 1 1 240px; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.q-agent-status-detail { min-width: 0; overflow-wrap: anywhere; }
+.q-agent-evidence { display: flex; flex: 1 1 100%; min-width: 0; flex-wrap: wrap; gap: 6px; }
 .q-agent-welcome h2 { font-size: 28px; }
 .q-agent-welcome > p { font-size: 14px; line-height: 1.6; margin: 10px 0 0; }
 .q-agent-suggestions > button { font-size: 13px; }

@@ -1,4 +1,4 @@
-// NUVRO AI Animation Configuration
+// QUILLIX Animation Configuration
 // Centralized animation constants and settings
 
 export const ANIMATION_CONFIG = {

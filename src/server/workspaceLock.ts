@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 /**
  * M9.6: concurrent workspace safety.
  *
- * Two NUVRO AI instances opened on the same folder can corrupt each other's
+ * Two QUILLIX instances opened on the same folder can corrupt each other's
  * work: one writes a file while the other applies a stale patch. This module
  * makes that impossible by giving every workspace a single, exclusive lock.
  *
@@ -569,9 +569,9 @@ export async function tryAcquireWorkspaceLock(workspace: string, options: Worksp
 }
 
 function describeContention(workspace: string, owner?: WorkspaceLockOwner | null): string {
-  if (!owner) return `The workspace "${workspace}" is locked by another NUVRO AI instance.`;
+  if (!owner) return `The workspace "${workspace}" is locked by another QUILLIX instance.`;
   const since = owner.acquiredAt ? ` since ${owner.acquiredAt}` : '';
-  return `The workspace "${workspace}" is locked by another NUVRO AI instance (pid ${owner.pid} on ${owner.hostname}${since}). Close that instance or wait for it to exit.`;
+  return `The workspace "${workspace}" is locked by another QUILLIX instance (pid ${owner.pid} on ${owner.hostname}${since}). Close that instance or wait for it to exit.`;
 }
 
 /** Release a lock. Only the owning session may release it. */

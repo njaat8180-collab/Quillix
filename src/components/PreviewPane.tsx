@@ -17,7 +17,7 @@ interface PreviewPaneProps {
 }
 
 /**
- * Built-in web preview: renders the project's entry HTML inside NUVRO AI via
+ * Built-in web preview: renders the project's entry HTML inside QUILLIX via
  * the loopback-only /preview static server. The preview re-mounts the iframe
  * on refresh (true reload, not a cached view).
  */
@@ -99,7 +99,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ root, entry, title, on
         }
       } catch {
         setPreviewStatus('failed');
-        setPreviewError('Preview status could not be read. Check that NUVRO AI is still running.');
+        setPreviewError('Preview status could not be read. Check that QUILLIX is still running.');
       }
     }, 1500);
     return () => window.clearInterval(timer);
@@ -251,7 +251,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ root, entry, title, on
         </div>
       )}
 
-      {/* Separate loopback origin prevents generated code from calling NUVRO AI APIs
+      {/* Separate loopback origin prevents generated code from calling QUILLIX APIs
           while allowing each project's localStorage and normal browser scripts. */}
       {waitingForEntry ? (
         <div role="status" className="p-4 text-sm text-[var(--text-muted)]">{previewError}</div>
@@ -271,7 +271,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({ root, entry, title, on
             ref={frameRef}
             key={nonce}
             src={src}
-            title={`NUVRO AI built-in preview${title ? ` — ${title}` : ''}`}
+            title={`QUILLIX built-in preview${title ? ` — ${title}` : ''}`}
             className="h-full min-h-0 border-0 bg-white shadow-sm transition-[width] duration-200"
             style={{ width: viewportWidth ? `${viewportWidth}px` : '100%', maxWidth: '100%' }}
             sandbox="allow-scripts allow-same-origin allow-forms allow-modals"

@@ -564,7 +564,7 @@ const ADAPTERS: Adapter[] = [
         runCommand: '',
         previewable: true,
         previewEntry: entry,
-        detectionNote: 'Static website — opens in the built-in NUVRO AI preview.',
+        detectionNote: 'Static website — opens in the built-in QUILLIX preview.',
       };
     },
     runtimeCandidates() {

@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import type { AgentObservability } from '../shared/types.js';
 
 /**
- * NUVRO AI Task State Store (§21 — TASK MEMORY / RESUME)
+ * QUILLIX Task State Store (§21 — TASK MEMORY / RESUME)
  * ====================================================
  * Persistent, per-workspace record of every agent task: the user request, the
  * canonical project root, every file created/modified/deleted (verified),
@@ -126,8 +126,8 @@ export class TaskStateStore {
       if (task.status !== 'running') continue;
       task.status = 'cancelled';
       task.updatedAt = now;
-      task.finalText = task.finalText || 'Task was interrupted when the previous NUVRO AI session ended. Review the recorded files or resume it explicitly.';
-      if (!task.errors.includes('Interrupted by a previous NUVRO AI session.')) task.errors.push('Interrupted by a previous NUVRO AI session.');
+      task.finalText = task.finalText || 'Task was interrupted when the previous QUILLIX session ended. Review the recorded files or resume it explicitly.';
+      if (!task.errors.includes('Interrupted by a previous QUILLIX session.')) task.errors.push('Interrupted by a previous QUILLIX session.');
       if (task.observability && !task.observability.finishedAt) {
         task.observability.finishedAt = now;
         task.observability.durationMs = Math.max(0, now - task.observability.startedAt);

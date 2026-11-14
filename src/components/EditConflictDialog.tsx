@@ -7,7 +7,7 @@ export type EditConflictResolution = 'reload' | 'overwrite' | 'keep';
 
 interface EditConflictDialogProps {
   filePath: string;
-  /** Current contents on disk — the version NUVRO AI wrote. */
+  /** Current contents on disk — the version QUILLIX wrote. */
   diskContent: string;
   /** The user's unsaved editor buffer. */
   editorContent: string;
@@ -74,7 +74,7 @@ export const EditConflictDialog: React.FC<EditConflictDialogProps> = ({
               {filePath}
             </p>
             <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-              {reason || 'NUVRO AI wrote a new version while your unsaved edits were still open. Choose which version to keep.'}
+              {reason || 'QUILLIX wrote a new version while your unsaved edits were still open. Choose which version to keep.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -114,7 +114,7 @@ export const EditConflictDialog: React.FC<EditConflictDialogProps> = ({
         <div className="px-4 py-2 border-b border-[var(--border)] flex items-center gap-4 text-[11px]">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70" aria-hidden="true" />
-            <span className="text-[var(--text-muted)]">On disk (NUVRO AI) — <span className="text-emerald-400 font-mono">+{patch.linesAdded}</span></span>
+            <span className="text-[var(--text-muted)]">On disk (QUILLIX) — <span className="text-emerald-400 font-mono">+{patch.linesAdded}</span></span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-rose-500/70" aria-hidden="true" />
@@ -167,7 +167,7 @@ export const EditConflictDialog: React.FC<EditConflictDialogProps> = ({
               </div>
               <div className="flex flex-col">
                 <div className="p-1.5 bg-[var(--surface)] text-emerald-400 font-semibold uppercase text-[10px] border-b border-[var(--border)] sticky top-0">
-                  On disk (NUVRO AI)
+                  On disk (QUILLIX)
                 </div>
                 <div className="p-2 whitespace-pre text-emerald-200 font-mono text-[11px]">{diskContent || '(empty)'}</div>
               </div>

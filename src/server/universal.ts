@@ -2,7 +2,7 @@
  * Keys are never persisted in settings.json and never sent to the renderer.
  * Supported protocols: OpenAI-compatible chat completions, Anthropic Messages,
  * and Gemini generateContent. The requested model must exist at the provider;
- * NUVRO AI does not claim access to any particular proprietary model.
+ * QUILLIX does not claim access to any particular proprietary model.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -141,13 +141,13 @@ function noteProviderCooldown(key: string, response: Response): void {
     || retryableServerFailure && retryAfter > 0;
   if (!shouldCool) return;
   // Overdrive Mode: only a provider-advertised window may gate the request.
-  // NUVRO AI's conservative fallback cooldown (30s/60s for a header-less 429)
+  // QUILLIX's conservative fallback cooldown (30s/60s for a header-less 429)
   // is an app-imposed delay, so it is not recorded; the request retries with
   // the minimal floor and the provider itself enforces the real limit.
   if (isOverdriveActive() && reset <= 0) return;
   if (shouldCool) {
     // Free endpoints sometimes omit both Retry-After and reset headers. A
-    // short conservative cooldown prevents NUVRO AI from immediately sending
+    // short conservative cooldown prevents QUILLIX from immediately sending
     // another request burst and turning one 429 into a quota storm.
     const fallbackCooldown = response.status === 429 ? (nvidiaEndpoint ? 60_000 : 30_000)
       : exhausted && !reset ? (nvidiaEndpoint ? 30_000 : 5_000) : 0;
@@ -249,7 +249,7 @@ export function providerBudgetWaitMs(key: string, budget: ProviderRequestBudget 
 function effectiveProviderIntervalMs(key: string, minimumIntervalMs: number, now = Date.now()): number {
   const configured = normalizeProviderRequestInterval(minimumIntervalMs);
   // Overdrive Mode: provider headers may describe the limit, but the spacing
-  // they imply is NUVRO AI's own throttle. Overdrive fires the next request
+  // they imply is QUILLIX's own throttle. Overdrive fires the next request
   // immediately; an actual 429 is served by the exact-retry loop instead.
   if (isOverdriveActive()) return configured;
   const adaptive = providerAdaptiveIntervals.get(key);
@@ -388,7 +388,7 @@ export function overdriveRateLimitWaitBudget(totalWaitedMs: number, advertisedWa
 }
 
 function universalTransientError(status: number, retries: number): string {
-  if (status === 429) return 'Universal API rate limit is still active. NUVRO AI will respect the provider cooldown; retry later or check provider quota.';
+  if (status === 429) return 'Universal API rate limit is still active. QUILLIX will respect the provider cooldown; retry later or check provider quota.';
   if (retries === 0) return `Universal API returned HTTP ${status}. The provider cooldown is active; retry later. Check endpoint, model name, access and credits.`;
   return `Universal API returned HTTP ${status} after ${retries} retries. Check endpoint, model name, access and credits.`;
 }
@@ -435,7 +435,7 @@ export function readUniversalKey(context: UniversalKeyContext): string {
   if (!fs.existsSync(keyFile)) return '';
   const record = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
   if (record?.format !== 'dpapi-current-user-v2' || typeof record.data !== 'string')
-    throw new Error('Legacy Universal key needs migration. Restart NUVRO AI or save your key again.');
+    throw new Error('Legacy Universal key needs migration. Restart QUILLIX or save your key again.');
   if (record.scope !== universalKeyScope(context))
     throw new Error('The saved Universal API key belongs to a different endpoint. Save a key for this API provider before connecting.');
   return dpapi('unprotect', record.data);
@@ -609,7 +609,7 @@ export function compactUniversalUserContent(content: string, maxChars: number): 
     : deduped;
   if (compact.length <= maxChars) return { content: compact, changed: compact !== content };
 
-  const marker = '\n\n[NUVRO AI omitted middle text to fit provider size limits; do not assume omitted requirements.]\n\n';
+  const marker = '\n\n[QUILLIX omitted middle text to fit provider size limits; do not assume omitted requirements.]\n\n';
   if (maxChars <= marker.length) return { content: marker.slice(0, Math.max(0, maxChars)), changed: true };
   const contentBudget = maxChars - marker.length;
   const tailSize = Math.ceil(contentBudget * 0.36);
@@ -705,7 +705,7 @@ export function trimUniversalToolsForPayload(tools: ToolDefinition[]): {tools: T
 }
 
 export function universalPayloadTooLargeError(): string {
-  return 'Universal API rejected this request as too large (HTTP 413). NUVRO AI removed older history/tool output once, but the system instructions and latest request still need to fit. Reduce selected files/context or use a model with a larger context limit.';
+  return 'Universal API rejected this request as too large (HTTP 413). QUILLIX removed older history/tool output once, but the system instructions and latest request still need to fit. Reduce selected files/context or use a model with a larger context limit.';
 }
 
 function applyUniversalPayload(body: any, protocol: UniversalProtocol, messages: UniversalMessage[], tools: ToolDefinition[]): void {
@@ -1245,7 +1245,7 @@ export class UniversalProvider implements AIProvider {
               await response.body?.cancel();
               releaseProviderSlot?.();
               releaseProviderSlot = null;
-              throw new Error(`Universal API rate limit is still active after ${Math.round(overdriveRateLimitWaitedMs / 60_000)} minutes of waiting for the provider's window. NUVRO AI waited the full advertised window each time. The task is resumable — retry shortly or switch provider/key.`);
+              throw new Error(`Universal API rate limit is still active after ${Math.round(overdriveRateLimitWaitedMs / 60_000)} minutes of waiting for the provider's window. QUILLIX waited the full advertised window each time. The task is resumable — retry shortly or switch provider/key.`);
             }
             options.onRateLimit?.({
               retryAt: Date.now() + rateLimitBudget.waitMs,
@@ -1309,7 +1309,7 @@ export class UniversalProvider implements AIProvider {
       }
       if(response.status===413) throw new Error(universalPayloadTooLargeError());
       if(!response.ok) {
-        if (response.status === 402) throw new Error('NVIDIA/provider credits are exhausted or billing is required (HTTP 402). Check the account balance or billing settings; NUVRO AI will not switch to a local model.');
+        if (response.status === 402) throw new Error('NVIDIA/provider credits are exhausted or billing is required (HTTP 402). Check the account balance or billing settings; QUILLIX will not switch to a local model.');
         if (response.status === 401) throw new Error('Provider rejected the API key (HTTP 401). Check the key and its account.');
         if (response.status === 403) throw new Error('Provider denied access (HTTP 403). Check model access, account permissions, and endpoint.');
         throw new Error([429,500,502,503,504,529].includes(response.status)

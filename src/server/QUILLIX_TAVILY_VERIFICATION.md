@@ -1,6 +1,6 @@
-# NUVRO AI Tavily Stale-Answer Verification
+# QUILLIX Tavily Stale-Answer Verification
 
-NUVRO AI treats Tavily as an optional, evidence-gathering brain-side service. It
+QUILLIX treats Tavily as an optional, evidence-gathering brain-side service. It
 does not replace Ollama or an online coding model, and it never silently turns
 an unavailable web check into a fresh answer.
 
@@ -15,7 +15,7 @@ use, but it is never copied into settings or the renderer.
 
 1. The agent calls `verify_current_information` only for version-sensitive APIs,
    libraries, documentation, or other claims that can become stale.
-2. NUVRO AI performs one bounded Tavily Search request, preferring official docs,
+2. QUILLIX performs one bounded Tavily Search request, preferring official docs,
    then extracts up to two highest-priority pages for evidence.
 3. Search and Extract responses are cached for 15 minutes using a query/answer
    fingerprint. Usage is persisted as aggregate counts and credits only.
@@ -23,7 +23,7 @@ use, but it is never copied into settings or the renderer.
    claims receive an individual finding, confidence, cited URLs, and an aggregate
    freshness score. The result is `supported`, `possibly_stale`, `contradicted`, `unverified`, or
    `offline`, with source URLs, timestamps, usage and an explanation.
-5. The result is read-only. A stale finding can inform the normal NUVRO AI plan →
+5. The result is read-only. A stale finding can inform the normal QUILLIX plan →
    approval → edit → test → retest workflow; Tavily never writes files directly.
 
 Usage stores searches, extracts, credits, timestamps, verification count, and an

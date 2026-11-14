@@ -67,7 +67,7 @@ export class QuillixErrorBoundary extends React.Component<React.PropsWithChildre
       // Storage may be unavailable (private mode, quota) — never block the UI.
     }
     // A desktop log sink can be wired over IPC later; console keeps it visible now.
-    console.error("[NUVRO AI] renderer error captured by crash boundary:", report);
+    console.error("[QUILLIX] renderer error captured by crash boundary:", report);
   }
 
   private reload = (): void => {
@@ -188,12 +188,12 @@ function CrashScreen(props: { error: Error; info: React.ErrorInfo | null; onRest
     background: "linear-gradient(135deg, #00b4ff, #0066ff)", color: "#fff", boxShadow: "0 8px 22px rgba(0,102,255,0.35)",
   };
   return (
-    <div role="alertdialog" aria-modal="true" aria-label="NUVRO AI crashed" style={screenStyle}>
+    <div role="alertdialog" aria-modal="true" aria-label="QUILLIX crashed" style={screenStyle}>
       <div style={cardStyle}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           <div style={badgeStyle}><IconAlert /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>NUVRO AI hit an unexpected error</h1>
+            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>QUILLIX hit an unexpected error</h1>
             <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted, #9aa3b2)" }}>
               Your work and settings are safe. Server-side settings, keys and workspace data are preserved — this was an interface error.
             </p>
@@ -218,13 +218,13 @@ function CrashScreen(props: { error: Error; info: React.ErrorInfo | null; onRest
         </details>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 20 }}>
-          <button type="button" onClick={onRestart} style={primaryButton} aria-label="Restart NUVRO AI"><IconRotate /> Restart app</button>
+          <button type="button" onClick={onRestart} style={primaryButton} aria-label="Restart QUILLIX"><IconRotate /> Restart app</button>
           <button type="button" onClick={onRecover} style={buttonBase} aria-label="Recover workspace"><IconLife /> Recover workspace</button>
           <button type="button" onClick={onReport} style={{ ...buttonBase, background: "transparent" }} aria-label="Copy crash report"><IconCopy /> Copy crash report</button>
         </div>
 
         <p style={{ margin: "16px 0 0", fontSize: 11, color: "var(--text-muted, #9aa3b2)" }}>
-          NUVRO AI {QUILLIX_APP_VERSION} · Nothing was written to your project. If this repeats, copy the crash report and share it with support.
+          QUILLIX {QUILLIX_APP_VERSION} · Nothing was written to your project. If this repeats, copy the crash report and share it with support.
         </p>
       </div>
     </div>

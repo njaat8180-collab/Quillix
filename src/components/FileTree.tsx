@@ -106,18 +106,12 @@ export const FileTree: React.FC<FileTreeProps> = ({
     if (node.isDirectory) {
       return (
         <div key={nodeKey} className="flex flex-col select-none">
-          <div
-            className={`group flex items-center justify-between py-1 px-2 hover:bg-[var(--hover)] rounded cursor-pointer text-xs text-[var(--text)]`}
-            style={{ paddingLeft: `${depth * 12 + 6}px` }}
-            onClick={() => toggleFolder(node.path)}
-          >
-            <div className="flex items-center space-x-1.5 truncate">
-              {isCollapsed ? <ChevronRight size={13} className="text-[#8b949e]" /> : <ChevronDown size={13} className="text-[#8b949e]" />}
-              {isCollapsed ? <Folder size={14} className="text-amber-500" /> : <FolderOpen size={14} className="text-amber-400" />}
+          <div className="group flex items-center py-1 px-2 hover:bg-[var(--hover)] rounded text-xs text-[var(--text)]" style={{ paddingLeft: `${depth * 12 + 6}px` }}>
+            <button type="button" className="flex min-w-0 flex-1 items-center space-x-1.5 text-left" onClick={() => toggleFolder(node.path)} aria-expanded={!isCollapsed} aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} folder ${node.name}`}>
               <span className="truncate font-medium">{node.name}</span>
-            </div>
+            </button>
 
-            {!readOnly && <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1">
+            {!readOnly && <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 flex items-center space-x-1">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -141,7 +135,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 placeholder={creatingIn.isFolder ? 'folder name...' : 'filename.ext...'}
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
-                onBlur={() => setCreatingIn(null)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingIn(null); setNewItemName(''); } }}
                 className="w-full bg-[#0d1117] border border-blue-500 rounded px-1.5 py-0.5 text-xs text-white outline-none"
               />
             </form>
@@ -159,32 +153,32 @@ export const FileTree: React.FC<FileTreeProps> = ({
     return (
       <div
         key={nodeKey}
-        className={`group flex items-center justify-between py-1 px-2 rounded cursor-pointer text-xs ${
+        className={`group flex items-center justify-between py-1 px-2 rounded text-xs ${
           isActive ? 'bg-[var(--accent-soft)] text-[var(--text)] border-l-2 border-[var(--accent)]' : 'text-[var(--text)] hover:bg-[var(--hover)]'
         }`}
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
-        onClick={() => onOpenFile(node.path)}
       >
-        <div className="flex items-center space-x-2 truncate flex-1 mr-1">
-          {getFileIcon(node.name)}
-          {isRenaming ? (
-            <form onSubmit={handleRenameSubmit} className="flex-1" onClick={(e) => e.stopPropagation()}>
-              <input
-                autoFocus
-                type="text"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={() => setRenamingPath(null)}
-                className="w-full bg-[#0d1117] border border-blue-500 rounded px-1 py-0.2 text-xs text-white outline-none"
-              />
-            </form>
-          ) : (
+        {isRenaming ? (
+          <form onSubmit={handleRenameSubmit} className="flex min-w-0 flex-1 items-center gap-2">
+            {getFileIcon(node.name)}
+            <input
+              autoFocus
+              type="text"
+              value={renameValue}
+              aria-label={`Rename ${node.name}`}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setRenamingPath(null); setRenameValue(''); } }}
+              className="w-full min-w-0 bg-[#0d1117] border border-blue-500 rounded px-1 py-0.5 text-xs text-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            />
+          </form>
+        ) : (
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onOpenFile(node.path)} aria-label={`Open file ${node.name}`}>
+            {getFileIcon(node.name)}
             <span className="truncate">{node.name}</span>
-          )}
-        </div>
+          </button>
+        )}
 
-        {/* Hover action buttons */}
-        {!readOnly && <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 shrink-0">
+        {!readOnly && !isRenaming && <div className="flex shrink-0 items-center space-x-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -257,7 +251,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
             placeholder={creatingIn.isFolder ? 'New folder name...' : 'New file name...'}
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
-            onBlur={() => setCreatingIn(null)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingIn(null); setNewItemName(''); } }}
             className="w-full bg-[#0d1117] border border-blue-500 rounded px-2 py-1 text-xs text-white outline-none"
           />
         </form>

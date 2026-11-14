@@ -186,7 +186,7 @@ export const TaskHistoryPanel: React.FC<Props> = ({ active = true, working = fal
     !working && (task.rollback?.files?.length ?? 0) > 0 && !task.rollback?.restoredAt;
 
   return (
-    <section className="q-task-history flex h-full flex-col overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="NUVRO AI task history">
+    <section className="q-task-history flex h-full flex-col overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="QUILLIX task history">
       <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
         <div className="flex items-center gap-2">
           {selected ? (

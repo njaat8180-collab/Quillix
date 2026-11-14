@@ -183,7 +183,7 @@ export const Composer: React.FC<ComposerProps> = ({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="A thought, a bug, a wild idea…"
-            aria-label="Message NUVRO AI"
+            aria-label="Message QUILLIX"
             className="w-full bg-transparent px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--text-muted)] outline-none resize-none min-h-[56px]"
             disabled={isWorking || !conversationModeReady}
           />

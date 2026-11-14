@@ -75,7 +75,7 @@ interface ChatPanelProps {
 }
 
 /**
- * Right-side chat panel: the conversation with NUVRO AI (Normal Chat Mode and
+ * Right-side chat panel: the conversation with QUILLIX (Normal Chat Mode and
  * Coding Agent Mode both live here). The center of the app stays reserved
  * for code; this panel is always available while the agent works.
  */
@@ -218,15 +218,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {...motionFadeIn}
     >
       {/* Chat header */}
-      <motion.div className="q-chat-header px-3 sm:px-5 py-3 border-b border-[var(--border)] flex items-center gap-2 shrink-0" {...motionSlideUp}>
-        <span className="text-[13px] font-semibold tracking-wide text-[var(--text)]">{variant === 'side' ? 'Agent' : 'QUILLIX'}</span>
-        <div className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] truncate">
+      <motion.div className="q-chat-header px-3 sm:px-5 py-3 border-b border-[var(--border)] flex flex-wrap items-center gap-x-3 gap-y-2 shrink-0" {...motionSlideUp}>
+        <span className="q-chat-brand text-[13px] font-semibold tracking-wide text-[var(--text)]">{variant === 'side' ? 'Agent' : 'QUILLIX'}</span>
+        <div className="q-chat-provider flex min-w-0 flex-1 items-center gap-1 text-[11px] text-[var(--text-muted)]">
           <Cpu size={11} style={{ color: badgeColor }} />
-          <span style={{ color: badgeColor }} className="truncate">{badgeText}</span>
-          {model && <span className="font-mono text-[10px] truncate hidden lg:inline">· {model}</span>}
+          <span style={{ color: badgeColor }} className="q-chat-provider-status">{badgeText}</span>
+          {model && <span className="q-chat-model font-mono text-[10px]">{model}</span>}
         </div>
-
-        <div className="flex-1" />
 
         {/* Animated chat history picker with inline actions. */}
         <div className="q-chat-history-wrap relative">
@@ -278,7 +276,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     </motion.div>
                   ))}
                 </motion.div>
-                <motion.button type="button" className="q-chat-history-new" onClick={() => { onNewChat(); setHistoryOpen(false); setHistoryQuery(''); }} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}><MessageSquarePlus size={13} /> New conversation</motion.button>
+                <motion.button type="button" className="q-chat-history-new" onClick={() => { onNewChat(); setHistoryOpen(false); setHistoryQuery(''); }} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}><MessageSquarePlus size={13} /> QuickFix</motion.button>
               </motion.div>
             </AnimatePresence>
           )}
@@ -286,8 +284,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <motion.button
           onClick={onNewChat}
           className="q-transition p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]"
-          title="New chat"
-          aria-label="New chat"
+          title="QuickFix"
+          aria-label="QuickFix"
           whileHover={{ scale: 1.1, rotate: 90 }}
           whileTap={{ scale: 0.9 }}
         >
@@ -350,7 +348,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-              title="The AI provider's rate limit was reached. NUVRO AI retries the moment the provider's window reopens."
+              title="The AI provider's rate limit was reached. QUILLIX retries the moment the provider's window reopens."
             >
               Rate limit hit — retrying automatically
             </motion.span>

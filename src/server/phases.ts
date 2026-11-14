@@ -2,7 +2,7 @@ import type { AgentPhase } from '../shared/types.js';
 import { isSingleFileCreationRequest } from './projectContract.js';
 
 /**
- * NUVRO AI Phase System
+ * QUILLIX Phase System
  *
  * Each coding request gets a task-specific workflow. The phase count and
  * descriptions depend on the requested deliverables, and repair/retest steps

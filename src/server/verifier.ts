@@ -10,11 +10,11 @@ import { requestedCommonJSExports, declaredCommonJSExports } from './exportContr
 const execFileAsync = promisify(execFile);
 
 /**
- * NUVRO AI Workspace Verifier
+ * QUILLIX Workspace Verifier
  *
  * Real, deterministic validation of generated files. Used by the agent engine
  * to guarantee the mandatory TEST → FIX → RETEST cycle: after the model
- * finishes writing files, NUVRO AI itself runs syntax/structure checks (node
+ * finishes writing files, QUILLIX itself runs syntax/structure checks (node
  * --check for JavaScript, py_compile for Python, JSON.parse for JSON, tag
  * balance for HTML) and reports genuine failures for repair.
  */
@@ -95,7 +95,7 @@ export class WorkspaceVerifier {
           // Transpilation checks syntax, not project-wide types or runtime.
           try {
             // TypeScript 7 no longer guarantees the legacy transpileModule
-            // compiler API. esbuild is already a mandatory NUVRO AI runtime
+            // compiler API. esbuild is already a mandatory QUILLIX runtime
             // dependency, and checks TS/TSX/JSX syntax without execution.
             const { transform } = await import('esbuild');
             const loader = ext === '.tsx' ? 'tsx' : ext === '.jsx' ? 'jsx' : 'ts';

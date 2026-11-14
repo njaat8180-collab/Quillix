@@ -154,7 +154,7 @@ export function ProviderProfiles({settings,onChange}:{settings:QuillixSettings;o
     </div>
     <div className="border border-[var(--border)] rounded-xl p-3 space-y-2">
       <p className="font-medium">Import provider code</p>
-      <p className="text-[11px] text-[var(--text-muted)]">Paste a Python <code>requests.post</code> example from the provider docs. NUVRO AI reads literal endpoint/model/auth fields in this window only; it never executes or uploads the pasted code.</p>
+      <p className="text-[11px] text-[var(--text-muted)]">Paste a Python <code>requests.post</code> example from the provider docs. QUILLIX reads literal endpoint/model/auth fields in this window only; it never executes or uploads the pasted code.</p>
       <textarea aria-label="Provider API code snippet" className={field+' min-h-24 font-mono text-[11px]'} value={snippet} onChange={e=>setSnippet(e.target.value)} placeholder={'invoke_url = "https://api.example.com/v1/chat/completions"\npayload = {"model": "your-model", ...}\nrequests.post(invoke_url, headers=headers, json=payload, stream=False)'} />
       <button type="button" className="q-button-outline px-3 py-2 rounded-xl" disabled={busy||!snippet.trim()} onClick={importSnippet}>Read snippet</button>
       {snippetMessage&&<p role="status" className="text-[11px] text-[var(--text-muted)]">{snippetMessage}</p>}
@@ -186,7 +186,7 @@ export function ProviderProfiles({settings,onChange}:{settings:QuillixSettings;o
     <label>Output price per million tokens (optional)<input type="number" min="0" className={field} value={outputPrice} onChange={e=>setOutputPrice(e.target.value)}/></label>
     <div className="border border-[var(--border)] rounded-xl p-3 space-y-2">
       <p className="font-medium">Request budget guard (optional)</p>
-      <p className="text-[11px] text-[var(--text-muted)]">Use the limits documented by your provider. Older context is compacted before requests; quotas are respected, not bypassed. Blank fields use NUVRO AI defaults.</p>
+      <p className="text-[11px] text-[var(--text-muted)]">Use the limits documented by your provider. Older context is compacted before requests; quotas are respected, not bypassed. Blank fields use QUILLIX defaults.</p>
       <label>Maximum input characters<input aria-label="Maximum provider input characters" type="number" min="12000" className={field} value={maxInputChars} onChange={e=>setMaxInputChars(e.target.value)} placeholder="60000"/></label>
       <label>Maximum output tokens<input aria-label="Maximum provider output tokens" type="number" min="256" className={field} value={maxOutputTokens} onChange={e=>setMaxOutputTokens(e.target.value)} placeholder="4096"/></label>
       <label>Minimum request spacing (ms)<input aria-label="Minimum provider request spacing" type="number" min="0" className={field} value={minRequestIntervalMs} onChange={e=>setMinRequestIntervalMs(e.target.value)} placeholder="0"/></label>

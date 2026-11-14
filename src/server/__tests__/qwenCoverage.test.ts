@@ -58,7 +58,7 @@ describe('OllamaQwenProvider public behavior', () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
     vi.stubGlobal('fetch', fetchMock);
     const provider = new OllamaQwenProvider({ model, offlineMode: true });
-    await expect(provider.generateText('Hi')).rejects.toThrow('NUVRO AI cannot connect to Ollama');
+    await expect(provider.generateText('Hi')).rejects.toThrow('QUILLIX cannot connect to Ollama');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

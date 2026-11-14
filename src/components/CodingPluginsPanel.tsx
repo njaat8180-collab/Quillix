@@ -41,7 +41,7 @@ export function CodingPluginsPanel({ compact = false, onChanged, onSelectTool, r
       <div><div className="q-plugins-eyebrow"><Blocks size={13} /> LOCAL CAPABILITIES</div><h2>Coding plugins</h2></div>
       <button onClick={refresh} disabled={loading || !!busy} className="q-icon-button" aria-label="Refresh coding plugins"><RefreshCw size={15} className={loading ? "animate-spin" : ""} /></button>
     </div>
-    <p className="q-plugins-intro">Installed with NUVRO AI. No account, API key, or internet needed for bundled packs.</p>
+    <p className="q-plugins-intro">Installed with QUILLIX. No account, API key, or internet needed for bundled packs.</p>
     {!loading && <div className="q-plugins-summary"><HardDrive size={13} /><span>{bundled.filter(p => p.enabled).length} / {bundled.length} offline packs enabled</span><Check size={12} /></div>}
     <label className="q-plugins-search"><Search size={14} /><input aria-label="Search coding plugins" placeholder="Find a capability…" value={query} onChange={e => setQuery(e.target.value)} /></label>
     {error && <p role="alert" className="q-plugins-error">{error}</p>}

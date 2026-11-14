@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - Interaction
+// QUILLIX Animation Variants - Interaction
 // Buttons, inputs, cards, spinners, progress
 
 import { Variants } from 'motion/react';

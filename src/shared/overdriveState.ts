@@ -6,7 +6,7 @@
  * universal transport's pacing and cooldowns, the provider router — follows
  * the live setting without threading it through every call site.
  *
- * Delays this removes are all NUVRO AI's own: request pacing, declared
+ * Delays this removes are all QUILLIX's own: request pacing, declared
  * rolling-quota windows, header-derived adaptive spacing, conservative
  * fallback cooldowns and resource-safety pauses. Provider-side latency and
  * limits (network, generation, Retry-After windows) always remain.

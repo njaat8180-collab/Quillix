@@ -66,7 +66,7 @@ export function createApiErrorHandler() {
     let message = 'Internal server error.';
     if (type === 'entity.too.large') message = 'Request body is too large.';
     else if (type === 'entity.parse.failed') message = 'Malformed JSON request body.';
-    else if (status < 500) message = String(err?.message || 'Request failed.').slice(0, 300);
+    else if (status < 500) message = 'Request could not be processed.';
     try {
       console.error('NUVRO AI request error:', err?.stack || err);
     } catch {

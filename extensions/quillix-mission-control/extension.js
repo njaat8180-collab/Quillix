@@ -3,7 +3,7 @@
  *
  * Dependency-free CommonJS so it installs and runs from a source checkout with
  * no build step and no network. It only READS the workspace-local
- * `.quillix/mission/goal-state.json` (the same persisted state the NUVRO AI
+ * `.quillix/mission/goal-state.json` (the same persisted state the QUILLIX
  * Studio panel uses) and renders it in a restricted webview.
  *
  * Nothing here is estimated or fabricated: a missing/invalid state file shows
@@ -245,7 +245,7 @@ function webviewShell() {
 /** Reads the workspace-local mission state. Returns { state, source, error }. */
 function readMissionState() {
   const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
-  if (!folder) return { state: null, source: 'no workspace', error: 'Open the NUVRO AI workspace to see mission state.' };
+  if (!folder) return { state: null, source: 'no workspace', error: 'Open the QUILLIX workspace to see mission state.' };
   const file = path.join(folder.uri.fsPath, ...MISSION_STATE_PATH);
   try {
     const raw = fs.readFileSync(file, 'utf8');

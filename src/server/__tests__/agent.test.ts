@@ -11,7 +11,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-describe('NUVRO AI Coding Agent Engine', () => {
+describe('QUILLIX Coding Agent Engine', () => {
   describe('PatchEngine', () => {
     it('refuses stale create and delete patches without overwriting newer work', () => {
       const create = PatchEngine.createPatch('new.ts', '', 'new content', 'created');
@@ -180,12 +180,12 @@ function process() {
 
     it('should create, read, and delete files inside boundary', () => {
       const ws = new WorkspaceManager(testDir);
-      const createRes = ws.createFile('hello.txt', 'Hello NUVRO AI');
+      const createRes = ws.createFile('hello.txt', 'Hello QUILLIX');
       expect(createRes.success).toBe(true);
 
       const readRes = ws.readFile('hello.txt');
       expect(readRes.success).toBe(true);
-      expect(readRes.content).toBe('Hello NUVRO AI');
+      expect(readRes.content).toBe('Hello QUILLIX');
 
       const delRes = ws.deleteFile('hello.txt');
       expect(delRes.success).toBe(true);

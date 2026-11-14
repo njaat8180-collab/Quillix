@@ -62,7 +62,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
   // --- Real agent command feed -------------------------------------------
   // Commands the coding agent executes (run_command / build / tests) are
-  // recorded server-side; poll them so the user can SEE what NUVRO AI runs.
+  // recorded server-side; poll them so the user can SEE what QUILLIX runs.
   const [agentHistory, setAgentHistory] = useState<TerminalHistoryEntry[]>([]);
 
   useEffect(() => {
@@ -400,7 +400,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         {agentHistory.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-1.5">
-              <Bot size={11} /> NUVRO AI agent activity
+              <Bot size={11} /> QUILLIX agent activity
             </div>
             {agentHistory.map((h) => (
               <div key={h.id} className="mb-2">

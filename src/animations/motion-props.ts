@@ -1,4 +1,4 @@
-// NUVRO AI Motion Props Helpers
+// QUILLIX Motion Props Helpers
 // Pre-configured motion props for common patterns
 
 import { HTMLMotionProps } from 'motion/react';

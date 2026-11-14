@@ -1,5 +1,5 @@
 /**
- * NUVRO AI Intent Router
+ * QUILLIX Intent Router
  *
  * Deterministically classifies a user prompt as either:
  *  - 'chat'  → a normal conversational message (no tools, no file/terminal

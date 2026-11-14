@@ -87,7 +87,7 @@ class Qwen3TransportFallbackMock implements AIProvider {
   supportsToolJsonSchemaForModel(): boolean { return true; }
   async chatWithTools(_messages: any[], _tools: ToolDefinition[], _options: AICompletionOptions = {}) {
     this.nonStreamingCalls++;
-    if (this.nonStreamingCalls <= 2) throw new Error('NUVRO AI cannot connect to Ollama (fetch failed).');
+    if (this.nonStreamingCalls <= 2) throw new Error('QUILLIX cannot connect to Ollama (fetch failed).');
     return { text: '', toolCalls: [{ id: `qwen3-${this.nonStreamingCalls}`, name: 'write_file', args: this.fileArgs(_options) }] };
   }
   async chatWithToolsStream(_messages: any[], _tools: ToolDefinition[], options: AICompletionOptions, _onToken: (chunk: string) => void) {

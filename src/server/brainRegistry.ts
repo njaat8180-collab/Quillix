@@ -2,7 +2,7 @@ import type { QuillixSettings } from '../shared/types.js';
 import type { AIProvider } from './qwen.js';
 
 /**
- * The stable contract between NUVRO AI's body (agent/tools) and a brain
+ * The stable contract between QUILLIX's body (agent/tools) and a brain
  * (Ollama, a cloud adapter, or a future provider plugin). The agent only needs
  * an AIProvider; the descriptor lets the UI and router reason about the
  * brain's capabilities without guessing from its name.

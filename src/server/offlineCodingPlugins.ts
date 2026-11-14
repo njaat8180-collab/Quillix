@@ -21,7 +21,7 @@ import { NodeDebugger } from './nodeDebugger.js';
  *
  * Now the binding is imported only when `plugin_tree_sitter_outline` is
  * actually invoked, and a load failure degrades to an actionable error while
- * the rest of NUVRO AI keeps running.
+ * the rest of QUILLIX keeps running.
  */
 type TreeSitterBundle = { Parser: any; JavaScriptGrammar: any; PythonGrammar: any };
 let treeSitterBundle: TreeSitterBundle | null = null;

@@ -73,7 +73,7 @@ export const MissionControlPanel: React.FC<Props> = ({ active = true, onClose })
   const counts = state?.counts;
 
   return (
-    <section className="q-mission-control flex h-full flex-col overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="NUVRO AI mission control">
+    <section className="q-mission-control flex h-full flex-col overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="QUILLIX mission control">
       <header className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
         <div className="flex items-center gap-2">
           <Target size={13} className="text-[var(--accent)]" />
@@ -226,7 +226,7 @@ export const MissionControlPanel: React.FC<Props> = ({ active = true, onClose })
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em]">Cursor benchmark</p>
             <p className="text-[var(--text)]">Cursor baseline: <strong className="font-semibold">{state.benchmarks.cursorBaseline}</strong></p>
-            <p className="mt-0.5">NUVRO AI harness: {state.benchmarks.harnessVerified ? 'verified' : 'unverified'} · no Cursor numbers are claimed</p>
+            <p className="mt-0.5">QUILLIX harness: {state.benchmarks.harnessVerified ? 'verified' : 'unverified'} · no Cursor numbers are claimed</p>
             {state.benchmarks.note && <p className="mt-0.5 text-[var(--text-muted)]">{state.benchmarks.note}</p>}
           </div>
         )}

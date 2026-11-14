@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - UI Components
+// QUILLIX Animation Variants - UI Components
 // Modal, panels, popovers, toasts
 
 import { Variants } from 'motion/react';

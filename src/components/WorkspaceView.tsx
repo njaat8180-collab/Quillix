@@ -32,7 +32,7 @@ interface WorkspaceViewProps {
   onFixWithAgent?: (errorLog: string) => void;
   /** Live agent activity stream shown in the left activity log. */
   agentActivities?: AgentActivity[];
-  /** Banner shown above the editor while the agent works (e.g. "NUVRO AI is editing src/game/player.js…"). */
+  /** Banner shown above the editor while the agent works (e.g. "QUILLIX is editing src/game/player.js…"). */
   agentBanner?: string | null;
   /** Ask the workspace to open (and re-read) a file — fired when the agent creates/modifies it. */
   focusFileRequest?: { path: string; nonce: number } | null;
@@ -278,7 +278,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               filePath,
               diskContent: disk.content,
               editorContent: existing.content,
-              reason: `NUVRO AI changed ${filePath} while your unsaved edits were open. Your buffer was preserved.`,
+              reason: `QUILLIX changed ${filePath} while your unsaved edits were open. Your buffer was preserved.`,
             });
           } else if (disk.success && typeof disk.content === `string`) {
             setWorkspaceError(`${filePath} now already contains your unsaved changes.`);
@@ -782,7 +782,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1.5 space-y-1">
             {recentActivities.length === 0 ? (
-              <div className="text-[11px] text-[var(--text-muted)]">NUVRO AI is idle.</div>
+              <div className="text-[11px] text-[var(--text-muted)]">QUILLIX is idle.</div>
             ) : (
               recentActivities.map((act, idx) => (
                 <div key={`${act.id}_${idx}`} className="text-[11px] leading-tight flex gap-2">
@@ -812,7 +812,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
       {/* CENTER: code editor + terminal */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-        {/* Agent status banner ("NUVRO AI is editing …") */}
+        {/* Agent status banner ("QUILLIX is editing …") */}
         {agentBanner && (
           <div className="h-8 px-3 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--accent-soft)] shrink-0">
             <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent)' }} />

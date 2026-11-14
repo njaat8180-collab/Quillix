@@ -237,7 +237,7 @@ export type QuillixTheme = 'light' | 'dark' | 'gray' | 'gradient';
 export type QuillixAnimationLevel = 'off' | 'minimal' | 'full';
 
 /**
- * Runtime settings shared between the NUVRO AI UI, the AgentEngine and the
+ * Runtime settings shared between the QUILLIX UI, the AgentEngine and the
  * Ollama provider. Persisted by the server (~/.quillix/settings.json).
  */
 export interface QuillixSettings {

@@ -121,7 +121,7 @@ describe('project RAG index', () => {
     expect(result.files[0]).toBe('src/server/providerRouter.ts');
   });
 
-  it('does not index temporary NUVRO AI benchmark workspaces inside the repository', () => {
+  it('does not index temporary QUILLIX benchmark workspaces inside the repository', () => {
     const root = makeRoot('quillix-rag-scratch-');
     fs.mkdirSync(path.join(root, 'qx-Ab12Cd'), { recursive: true });
     fs.writeFileSync(path.join(root, 'src.ts'), 'export const stableSource = true;');

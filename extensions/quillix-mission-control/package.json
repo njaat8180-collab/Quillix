@@ -1,7 +1,7 @@
 {
   "name": "quillix-mission-control",
   "displayName": "QUILLIX MISSION CONTROL",
-  "description": "Deadline tracker sidebar for the NUVRO AI mission: deadline countdown, verified progress, current phase/task, blockers, test results, checkpoints and next tasks, read live from .quillix/mission/goal-state.json.",
+  "description": "Deadline tracker sidebar for the QUILLIX mission: deadline countdown, verified progress, current phase/task, blockers, test results, checkpoints and next tasks, read live from .quillix/mission/goal-state.json.",
   "version": "0.1.0",
   "publisher": "quillix",
   "license": "MIT",
@@ -44,12 +44,12 @@
     "commands": [
       {
         "command": "quillix.missionControl.refresh",
-        "title": "NUVRO AI: Refresh Mission Control",
+        "title": "QUILLIX: Refresh Mission Control",
         "icon": "$(refresh)"
       },
       {
         "command": "quillix.missionControl.openMissionFolder",
-        "title": "NUVRO AI: Open Mission Files",
+        "title": "QUILLIX: Open Mission Files",
         "icon": "$(folder)"
       }
     ],

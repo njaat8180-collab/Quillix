@@ -1,14 +1,14 @@
 /**
- * NUVRO AI — Electron main process.
+ * QUILLIX — Electron main process.
  *
  * Startup flow:
  *   1. Acquire the single-instance lock (a second launch just focuses the
  *      existing window instead of fighting over the port).
- *   2. Check whether a NUVRO AI server is already serving on 127.0.0.1:3000.
+ *   2. Check whether a QUILLIX server is already serving on 127.0.0.1:3000.
  *        - Yes  -> reuse it (no second server, no EADDRINUSE).
  *        - No   -> check whether the port is occupied by something else.
- *                    - Occupied by a non-NUVRO AI app -> clear error, quit.
- *                    - Free -> spawn the bundled NUVRO AI server as a child
+ *                    - Occupied by a non-QUILLIX app -> clear error, quit.
+ *                    - Free -> spawn the bundled QUILLIX server as a child
  *                      process and wait until /api/health responds.
  *   3. Open the native BrowserWindow pointing at http://127.0.0.1:3000.
  *
@@ -92,8 +92,8 @@ async function fetchJson(url: string, timeoutMs = 1500): Promise<any | null> {
 }
 
 /**
- * Detect an already-running NUVRO AI server. /api/settings is the NUVRO AI
- * fingerprint: it only responds on a NUVRO AI backend.
+ * Detect an already-running QUILLIX server. /api/settings is the QUILLIX
+ * fingerprint: it only responds on a QUILLIX backend.
  */
 async function isQuillixRunning(): Promise<boolean> {
   const data = await fetchJson(`${APP_URL}/api/settings`);
@@ -128,7 +128,7 @@ function serverEntryPath(): string {
   return path.join(__dirname, '..', 'server.cjs');
 }
 
-/** Spawn the NUVRO AI server as a child process (runs as plain Node). */
+/** Spawn the QUILLIX server as a child process (runs as plain Node). */
 function startServerProcess(): ChildProcess {
   const entry = serverEntryPath();
   const cwd = app.isPackaged ? os.homedir() : process.cwd();
@@ -152,7 +152,7 @@ function startServerProcess(): ChildProcess {
   ownsServerProcess = true;
 
   child.on('error', (error) => {
-    serverStartupFailed = `Could not start the NUVRO AI server: ${error.message}`;
+    serverStartupFailed = `Could not start the QUILLIX server: ${error.message}`;
     log(serverStartupFailed);
   });
 
@@ -177,7 +177,7 @@ function startServerProcess(): ChildProcess {
 
     if (!mainWindow) {
       // Startup phase failure (e.g. port stolen between probe and listen).
-      serverStartupFailed = `The NUVRO AI server exited during startup (code ${code}).`;
+      serverStartupFailed = `The QUILLIX server exited during startup (code ${code}).`;
       return;
     }
 
@@ -192,10 +192,10 @@ function startServerProcess(): ChildProcess {
     }
     const choice = dialog.showMessageBoxSync(mainWindow, {
       type: 'error',
-      title: 'NUVRO AI',
-      message: 'The NUVRO AI server stopped unexpectedly.',
+      title: 'QUILLIX',
+      message: 'The QUILLIX server stopped unexpectedly.',
       detail: `Exit code: ${code}. The desktop window cannot work without it.${lastServerErrors.length ? `\n\nServer diagnostics:\n${lastServerErrors.join('\n')}` : ''}`,
-      buttons: ['Restart NUVRO AI', 'Quit'],
+      buttons: ['Restart QUILLIX', 'Quit'],
       defaultId: 0,
       noLink: true,
     });
@@ -221,7 +221,7 @@ async function restartServerAndReload(): Promise<void> {
     mainWindow.loadURL(APP_URL);
   } else {
     showErrorAndQuit(
-      'NUVRO AI could not restart its local server.',
+      'QUILLIX could not restart its local server.',
       serverStartupFailed || 'The server did not become ready in time.'
     );
   }
@@ -241,7 +241,7 @@ async function waitForServer(): Promise<boolean> {
 
 function stopServerProcess(): void {
   if (serverProcess && ownsServerProcess) {
-    log('stopping NUVRO AI server...');
+    log('stopping QUILLIX server...');
     try {
       const child = serverProcess;
       // Detach exit handling so quit is not interrupted.
@@ -272,7 +272,7 @@ async function stopServerProcessBounded(): Promise<void> {
   try {
     child.removeAllListeners('exit');
   } catch { /* the child may already be detached */ }
-  log('stopping NUVRO AI server (bounded shutdown)...');
+  log('stopping QUILLIX server (bounded shutdown)...');
   const result = await shutdownChildBounded(child as unknown as ShutdownChild, {
     graceMs: 3_000,
     forceMs: 1_500,
@@ -322,7 +322,7 @@ ipcMain.handle('dialog:select-folder', async (): Promise<string | null> => {
   if (!win) return null;
   const result = await dialog.showOpenDialog(win, {
     title: 'Open Project Folder',
-    message: 'Choose the project folder NUVRO AI should work in',
+    message: 'Choose the project folder QUILLIX should work in',
     properties: ['openDirectory', 'createDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
@@ -344,7 +344,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: 'NUVRO AI — Local AI Coding Agent',
+    title: 'QUILLIX — Local AI Coding Agent',
     backgroundColor: '#0b0e14',
     icon: appIconPath(),
     show: false, // shown on ready-to-show to avoid a white flash
@@ -363,7 +363,7 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
-    // NUVRO AI starts minimized by default so a background coding workspace
+    // QUILLIX starts minimized by default so a background coding workspace
     // does not interrupt the user's current work. The title control can
     // restore and maximize it whenever needed.
     mainWindow?.minimize();
@@ -371,7 +371,7 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
-    log('NUVRO AI UI loaded');
+    log('QUILLIX UI loaded');
   });
 
   // Keep the app local: block in-window navigation away from the local server.
@@ -383,7 +383,7 @@ function createWindow(): void {
   });
 
   // New windows are never allowed; external http(s) links open in the
-  // system browser instead of hijacking the NUVRO AI window.
+  // system browser instead of hijacking the QUILLIX window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!isLocalAppUrl(url) && /^https?:\/\//i.test(url)) {
       shell.openExternal(url);
@@ -404,7 +404,7 @@ function createWindow(): void {
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  // Another NUVRO AI desktop instance is already running.
+  // Another QUILLIX desktop instance is already running.
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -416,27 +416,27 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
-      log('starting NUVRO AI desktop...');
+      log('starting QUILLIX desktop...');
 
       if (await isQuillixRunning()) {
-        log(`found an existing NUVRO AI server on ${APP_URL} — reusing it`);
+        log(`found an existing QUILLIX server on ${APP_URL} — reusing it`);
       } else if (await isPortOccupied()) {
         showErrorAndQuit(
-          `NUVRO AI cannot start: port ${PORT} is already in use.`,
-          `Another application (not NUVRO AI) is listening on ${HOST}:${PORT}.\n\nClose that application and start NUVRO AI again, or change PORT in the NUVRO AI .env file.`
+          `QUILLIX cannot start: port ${PORT} is already in use.`,
+          `Another application (not QUILLIX) is listening on ${HOST}:${PORT}.\n\nClose that application and start QUILLIX again, or change PORT in the QUILLIX .env file.`
         );
         return;
       } else {
-        log(`starting local NUVRO AI server (${APP_URL})...`);
+        log(`starting local QUILLIX server (${APP_URL})...`);
         serverProcess = startServerProcess();
         const ready = await waitForServer();
         if (!ready) {
           const nowRunning = await isQuillixRunning();
           if (nowRunning) {
-            log('another NUVRO AI instance won the port race — reusing its server');
+            log('another QUILLIX instance won the port race — reusing its server');
           } else {
             showErrorAndQuit(
-              'NUVRO AI could not start its local server.',
+              'QUILLIX could not start its local server.',
               serverStartupFailed ||
                 `The server did not respond on ${APP_URL} within ${READY_TIMEOUT_MS / 1000} seconds.\n\nCheck the console output for details.`
             );
@@ -453,7 +453,7 @@ if (!gotLock) {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
       });
     } catch (err: any) {
-      showErrorAndQuit('NUVRO AI failed to start.', err?.message || String(err));
+      showErrorAndQuit('QUILLIX failed to start.', err?.message || String(err));
     }
   });
 

@@ -34,7 +34,7 @@ export interface AICompletionOptions {
   providerModelFailoverCooldownBypass?: boolean;
 }
 
-/** Runtime capabilities exposed by the selected brain to NUVRO AI's body. */
+/** Runtime capabilities exposed by the selected brain to QUILLIX's body. */
 export interface ProviderCapabilities {
   tools: boolean;
   streaming: boolean;
@@ -139,7 +139,7 @@ export interface ProviderConfig {
 }
 
 const CANNOT_CONNECT_MESSAGE =
-  'NUVRO AI cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.';
+  'QUILLIX cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.';
 
 export class OllamaQwenProvider implements AIProvider {
   public getSelectedModel(requestedModel?: string): string { return requestedModel || this.defaultModel; }
@@ -273,7 +273,7 @@ export class OllamaQwenProvider implements AIProvider {
     const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
     if (offlineMode && !isLoopback) {
       throw new Error(
-        'Offline Mode requires Ollama to run on localhost (localhost, 127.0.0.1, or ::1). NUVRO AI never falls back to a cloud AI provider.'
+        'Offline Mode requires Ollama to run on localhost (localhost, 127.0.0.1, or ::1). QUILLIX never falls back to a cloud AI provider.'
       );
     }
 
@@ -334,7 +334,7 @@ export class OllamaQwenProvider implements AIProvider {
       const models = tags.models || [];
       // Ollama can return aliases with different casing, whitespace, or an
       // implicit :latest tag. Compare canonical names so a valid installed
-      // model does not appear as missing in NUVRO AI.
+      // model does not appear as missing in QUILLIX.
       const canonicalModel = (value: string) => value.trim().toLowerCase().replace(/:latest$/, '');
       const normalizedModel = canonicalModel(model);
       const availableModels = models

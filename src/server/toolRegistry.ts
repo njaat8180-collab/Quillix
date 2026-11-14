@@ -1143,7 +1143,7 @@ export class ToolRegistry {
       if (typeof candidate !== 'string' || !WorkspaceManager.isSecretPath(candidate)) continue;
       const checked = this.workspace.resolveSafePath(candidate);
       if (checked.safe && fs.existsSync(checked.fullPath)) {
-        const error = `Protected secret file mutation blocked: ${candidate} already exists and NUVRO AI cannot read it to preserve its contents. Update it manually or use the provider's secure settings.`;
+        const error = `Protected secret file mutation blocked: ${candidate} already exists and QUILLIX cannot read it to preserve its contents. Update it manually or use the provider's secure settings.`;
         return { toolCallId, toolName: name, success: false, output: error, error };
       }
     }
@@ -1194,7 +1194,7 @@ export class ToolRegistry {
               toolName: name,
               success: true,
               staged: true,
-              output: `Change prepared for ${args.filePath} but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the NUVRO AI UI. Tell the user to review the proposed change and apply it.`,
+              output: `Change prepared for ${args.filePath} but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the QUILLIX UI. Tell the user to review the proposed change and apply it.`,
               data: patch,
             };
           }
@@ -1364,7 +1364,7 @@ export class ToolRegistry {
               toolName: name,
               success: true,
               staged: true,
-              output: `Append to ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the NUVRO AI UI.`,
+              output: `Append to ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the QUILLIX UI.`,
               data: patch,
             };
           }
@@ -1459,7 +1459,7 @@ export class ToolRegistry {
               toolName: name,
               success: true,
               staged: true,
-              output: `Edit to ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the NUVRO AI UI.`,
+              output: `Edit to ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the QUILLIX UI.`,
               data: patch,
             };
           }
@@ -1486,7 +1486,7 @@ export class ToolRegistry {
               toolName: name,
               success: true,
               staged: true,
-              output: `New file ${args.filePath} prepared but NOT created: Auto Apply Diffs is OFF, so the user must review and approve this change in the NUVRO AI UI. Tell the user to review the proposed change and apply it.`,
+              output: `New file ${args.filePath} prepared but NOT created: Auto Apply Diffs is OFF, so the user must review and approve this change in the QUILLIX UI. Tell the user to review the proposed change and apply it.`,
               data: patch,
             };
           }
@@ -1892,7 +1892,7 @@ export class ToolRegistry {
               toolName: name,
               success: true,
               staged: true,
-              output: `Patch for ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the NUVRO AI UI. Tell the user to review the proposed change and apply it.`,
+              output: `Patch for ${args.filePath} prepared but NOT applied: Auto Apply Diffs is OFF, so the user must review and approve this change in the QUILLIX UI. Tell the user to review the proposed change and apply it.`,
               data: patch,
             };
           }

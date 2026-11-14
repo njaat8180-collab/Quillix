@@ -55,7 +55,7 @@ export class WorkspaceManager {
   }
 
   /**
-   * M9.6: refuse to mutate the workspace while another live NUVRO AI instance
+   * M9.6: refuse to mutate the workspace while another live QUILLIX instance
    * owns it. The owning instance itself is always allowed, and a lock whose
    * owner crashed is ignored so the workspace recovers automatically.
    */
@@ -203,16 +203,44 @@ export class WorkspaceManager {
    * Reading them returns a clear refusal instead of the secrets inside.
    */
   private static isProtectedSecretFile(relativePath: string): boolean {
-    const base = path.basename(relativePath).toLowerCase();
+    const normalized = String(relativePath || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const parts = normalized.split('/').filter(Boolean);
+    const base = parts.at(-1) || '';
+    const hasParent = (name: string, child: string) => {
+      const index = parts.lastIndexOf(name);
+      return index >= 0 && parts[index + 1] === child;
+    };
+
+    // Key stores and cloud CLIs place credentials under well-known private
+    // directories. Block their contents even when the filenames look generic.
+    if (
+      parts.includes('.ssh') ||
+      parts.includes('secrets') ||
+      hasParent('.aws', 'credentials') ||
+      hasParent('.docker', 'config.json') ||
+      hasParent('.kube', 'config') ||
+      hasParent('.azure', 'accesstokens.json') ||
+      (hasParent('.config', 'gcloud') && parts.includes('application_default_credentials.json')) ||
+      (hasParent('.terraform.d', 'credentials.tfrc.json'))
+    ) return true;
+
     if (
       base === '.env' ||
       base.startsWith('.env.') ||
       base === 'id_rsa' ||
       base === 'id_ed25519' ||
       base === 'id_ecdsa' ||
+      base === 'id_dsa' ||
       base === '.npmrc' ||
       base === '.netrc' ||
+      base === '.pypirc' ||
+      base === '.git-credentials' ||
+      base === '.gitcredentials' ||
+      base === '.dockercfg' ||
+      base === '.vault-token' ||
+      base === 'application_default_credentials.json' ||
       base === 'credentials.json' ||
+      base === 'credentials' ||
       base === 'secrets.json' ||
       base === 'secrets.yaml' ||
       base === 'secrets.yml' ||
@@ -224,7 +252,6 @@ export class WorkspaceManager {
       return true;
     }
     // Common secret-named subpaths
-    const normalized = relativePath.replace(/\\/g, '/').toLowerCase();
     return /(^|\/)(secrets?|credentials)\.(json|ya?ml|toml|ini|txt)$/.test(normalized);
   }
 
@@ -234,6 +261,12 @@ export class WorkspaceManager {
    */
   public resolveSafePath(relativePath: string): { safe: boolean; fullPath: string; error?: string } {
     try {
+      // Reject control bytes before any caller can sanitize them away. In
+      // particular, removing NUL first would turn an invalid path into a valid
+      // but different target and hide an injection attempt from validation.
+      if (typeof relativePath !== 'string' || /[\x00-\x1f\x7f]/.test(relativePath)) {
+        return { safe: false, fullPath: this.workspaceRoot, error: 'Operation blocked: path contains invalid control characters.' };
+      }
       // Absolute-looking paths (POSIX or Windows drive letters) are only allowed
       // when they resolve to a location inside the active workspace.
       const isAbsoluteStyle = /^[/\\]/.test(relativePath) || /^[A-Za-z]:[\\/]/.test(relativePath);
@@ -416,7 +449,7 @@ export class WorkspaceManager {
       const exists = fs.existsSync(check.fullPath);
       const resolved = exists ? fs.realpathSync(check.fullPath) : check.fullPath;
       if (WorkspaceManager.isProtectedSecretFile(relativePath) || WorkspaceManager.isProtectedSecretFile(resolved)) {
-        return { success: false, error: `Protected file: "${relativePath}" may contain secrets and cannot be read by the AI. NUVRO AI never exposes secrets in the model context.` };
+        return { success: false, error: `Protected file: "${relativePath}" may contain secrets and cannot be read by the AI. QUILLIX never exposes secrets in the model context.` };
       }
       if (!exists) {
         return { success: false, error: `File not found: ${relativePath}` };

@@ -23,7 +23,7 @@ export function formatFileSize(bytes: number): string {
 
 /** Honest refusal message for reads and writes over the hard ceiling. */
 export function fileSizeLimitError(sizeBytes: number): string {
-  return `File too large to handle safely (${formatFileSize(sizeBytes)}). Limit: ${formatFileSize(MAX_FILE_BYTES)}. Split the file or edit it outside NUVRO AI.`;
+  return `File too large to handle safely (${formatFileSize(sizeBytes)}). Limit: ${formatFileSize(MAX_FILE_BYTES)}. Split the file or edit it outside QUILLIX.`;
 }
 
 /** Non-blocking advisory shown when a file crosses the large threshold. */

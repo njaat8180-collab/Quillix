@@ -270,7 +270,7 @@ export const DeveloperCockpit: React.FC<Props> = ({ active = true, onClose }) =>
     try {
       const bundle = {
         exportedAt: new Date().toISOString(),
-        source: "NUVRO AI Developer Cockpit",
+        source: "QUILLIX Developer Cockpit",
         systemHealth,
         providerHealth: providers ?? null,
         git: gitStatus

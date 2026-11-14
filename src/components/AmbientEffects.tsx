@@ -1,4 +1,4 @@
-// NUVRO AI Ambient Effect Components
+// QUILLIX Ambient Effect Components
 // Drop-in components for atmospheric animations
 // All respect prefers-reduced-motion and the user's animation level
 // (Settings → Appearance → Motion).

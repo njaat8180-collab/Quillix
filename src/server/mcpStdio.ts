@@ -37,7 +37,6 @@ export class StdioMcpClient {
   private readonly pending = new Map<number, Pending>();
   private nextId = 1;
   private closed = false;
-  private stderr = '';
 
   public constructor(command: string, args: string[] = [], environment: Record<string, string> = {}) {
     if (!command.trim() || command.length > 512) throw new Error('MCP stdio command is required and must be at most 512 characters.');
@@ -51,12 +50,11 @@ export class StdioMcpClient {
       env: safeEnvironment(environment),
     });
     this.child.stdout.on('data', (chunk: Buffer) => this.consume(chunk));
-    this.child.stderr.on('data', (chunk: Buffer) => {
-      this.stderr = `${this.stderr}${chunk.toString('utf8')}`.slice(-4000);
-    });
     this.child.on('error', error => this.failAll(new Error(`MCP stdio process failed: ${error.message}`)));
     this.child.on('exit', (code, signal) => {
-      this.failAll(new Error(`MCP stdio process exited (code ${code ?? 'unknown'}, signal ${signal ?? 'none'}).${this.stderr ? ` ${this.stderr.trim()}` : ''}`));
+      // Child stderr is untrusted and may echo configured environment values.
+      // Keep it out of tool errors that are sent to the model and renderer.
+      this.failAll(new Error(`MCP stdio process exited (code ${code ?? 'unknown'}, signal ${signal ?? 'none'}).`));
     });
   }
 

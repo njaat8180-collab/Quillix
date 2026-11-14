@@ -84,7 +84,7 @@ function safeSelectedFile(root: string, selected?: string, currentFileBase = roo
     const realRelative = path.relative(realRoot, realFile).replace(/\\/g, '/');
     if (!realRelative || realRelative === '..' || realRelative.startsWith('../') || path.isAbsolute(realRelative)) return undefined;
     // Explicit selection may override generated-output exclusions (for
-    // example, editing dist/index.html), but never expose NUVRO AI's private
+    // example, editing dist/index.html), but never expose QUILLIX's private
     // index/state or Git internals through a symlink alias.
     if (realRelative.split('/').some(part => PROTECTED_SELECTED_DIRS.has(part.toLowerCase()))) return undefined;
     if (isSecret(realRelative) || !TEXT_EXTENSIONS.has(path.extname(realRelative).toLowerCase())) return undefined;
@@ -208,7 +208,7 @@ function safeEntryKind(root: string, absolute: string): 'directory' | 'file' | '
     const real = fs.realpathSync(absolute);
     const relative = path.relative(realRoot, real);
     if (relative.startsWith('..') || path.isAbsolute(relative)) return 'other'; // symlink escapes the workspace
-    // Private NUVRO AI state and Git internals are never indexed, even when a
+    // Private QUILLIX state and Git internals are never indexed, even when a
     // symlink or directory junction aliases them into the workspace.
     if (relative.split(/[\\/]/).some(part => PROTECTED_SELECTED_DIRS.has(part.toLowerCase()))) return 'other';
     const stat = fs.statSync(real);

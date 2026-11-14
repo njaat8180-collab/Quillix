@@ -254,7 +254,7 @@ describe('Python car-game request: real execution path', () => {
   });
 
   it('E: normal conversation does not create files or folders', async () => {
-    const provider = new ScriptedProvider([{ text: "Hi! I'm NUVRO AI, your local coding agent. How can I help today?" }]);
+    const provider = new ScriptedProvider([{ text: "Hi! I'm QUILLIX, your local coding agent. How can I help today?" }]);
     const engine = buildEngine(provider);
     const result = await run(engine, 'hello, how are you?');
 

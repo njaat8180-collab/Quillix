@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - Content
+// QUILLIX Animation Variants - Content
 // Lists, messages, tabs, activities
 
 import { Variants } from 'motion/react';

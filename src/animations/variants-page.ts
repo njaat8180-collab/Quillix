@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - Page Transitions
+// QUILLIX Animation Variants - Page Transitions
 // Page-level animations and theme transitions
 
 import { Variants } from 'motion/react';

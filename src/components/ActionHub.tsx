@@ -222,7 +222,7 @@ export const ActionHub: React.FC<ActionHubProps> = ({
     {
       id: 'create-project',
       label: 'Create New Project',
-      description: 'Pick a parent folder and name — NUVRO AI creates and opens it',
+      description: 'Pick a parent folder and name — QUILLIX creates and opens it',
       icon: <FolderPlus size={16} />,
       onClick: startNewProject,
       primary: false,

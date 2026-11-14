@@ -67,6 +67,8 @@ import { SourceContextRetriever } from './src/server/sourceContext.js';
 import { buildInlineCompletionPrompt, cleanInlineCompletion, trimCompletionContext } from './src/shared/inlineCompletion.js';
 import { buildContextualChatPrompt, normalizeAnchorLine, CONTEXTUAL_CHAT_MAX_CONTEXT_CHARS } from './src/shared/contextualChat.js';
 import { TavilyVerificationService, saveTavilyKey, clearTavilyKey, hasTavilyKey } from './src/server/tavilyVerification.js';
+import { parsePortValue } from './platform/portConfig.js';
+import { createApiErrorHandler } from './platform/httpSecurity.js';
 
 const universalKeyContext = selectedProviderConfig;
 
@@ -115,10 +117,10 @@ async function startServer() {
   // NUVRO AI's control API is localhost-only by default. Never bind 0.0.0.0 —
   // this API can read/write files, run terminal commands, and execute tools.
   const HOST = '127.0.0.1';
-  const PORT = Number(process.env.PORT || 3000);
-  if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+  const configuredPort = process.env.PORT?.trim();
+  const PORT = configuredPort ? parsePortValue(configuredPort) : 3000;
+  if (PORT === null) throw new Error('PORT must be a decimal integer between 1 and 65535.');
 
-  app.use(express.json({ limit: '50mb' }));
   const requireAgentMode = (req: Request, res: Response, next: NextFunction) => {
     const conversationMode = parseConversationMode(req.body?.conversationMode);
     if (!conversationMode) {
@@ -129,13 +131,10 @@ async function startServer() {
     }
     next();
   };
-  app.use(['/api/workspace/set-root', '/api/workspace/create-project', '/api/project/open', '/api/settings', '/api/providers/sarvam/key', '/api/providers/sarvam/failover-key', '/api/providers/sarvam/failover-keys', '/api/providers/openai/key', '/api/providers/openai/failover-key', '/api/providers/openai/failover-keys', '/api/providers/grok/key', '/api/providers/grok/failover-key', '/api/providers/grok/failover-keys', '/api/providers/groq/key', '/api/providers/groq/failover-key', '/api/providers/groq/failover-keys', '/api/providers/nvidia/key', '/api/providers/nvidia/failover-key', '/api/providers/nvidia/failover-keys', '/api/providers/universal/key', '/api/providers/tavily/key'], (req, res, next) => {
-    if (agentBusy && req.method !== 'GET') return res.status(409).json({ success: false, error: 'Wait for the active task to finish or stop it before changing the workspace or settings.' });
-    next();
-  });
-
   // --- SECURITY MIDDLEWARE -------------------------------------------------
-  // 1) The NUVRO AI API must only be reachable from the local machine.
+  // 1) Reject non-local and cross-origin requests before parsing their body.
+  // Parsing first lets a hostile page make Express buffer up to 50 MB even
+  // though the request is rejected immediately afterwards.
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
     if (!isLoopbackAddress(req.socket.remoteAddress) ||
         !validateLocalApiRequest(req.headers.host, req.headers.origin, PORT)) {
@@ -144,6 +143,13 @@ async function startServer() {
         error: 'Forbidden: NUVRO AI only accepts requests from its local application origin.',
       });
     }
+    next();
+  });
+
+  // Only trusted local API requests reach the body parser.
+  app.use(express.json({ limit: '50mb' }));
+  app.use(['/api/workspace/set-root', '/api/workspace/create-project', '/api/project/open', '/api/settings', '/api/providers/sarvam/key', '/api/providers/sarvam/failover-key', '/api/providers/sarvam/failover-keys', '/api/providers/openai/key', '/api/providers/openai/failover-key', '/api/providers/openai/failover-keys', '/api/providers/grok/key', '/api/providers/grok/failover-key', '/api/providers/grok/failover-keys', '/api/providers/groq/key', '/api/providers/groq/failover-key', '/api/providers/groq/failover-keys', '/api/providers/nvidia/key', '/api/providers/nvidia/failover-key', '/api/providers/nvidia/failover-keys', '/api/providers/universal/key', '/api/providers/tavily/key'], (req, res, next) => {
+    if (agentBusy && req.method !== 'GET') return res.status(409).json({ success: false, error: 'Wait for the active task to finish or stop it before changing the workspace or settings.' });
     next();
   });
 
@@ -2271,6 +2277,10 @@ const projectRag = new ProjectRag(workspaceManager.getRoot());
       if (activeAgentController === abortController) activeAgentController = null;
     }
   });
+
+  // Keep malformed JSON, oversized bodies and other uncaught API failures in
+  // the same bounded JSON error shape in development and production.
+  app.use(createApiErrorHandler());
 
   // Vite middleware setup
   if (process.env.NODE_ENV !== 'production') {

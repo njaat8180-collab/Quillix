@@ -1,9 +1,9 @@
 /**
- * NUVRO AI — bounded desktop shutdown.
+ * QUILLIX — bounded desktop shutdown.
  *
  * Hardening rationale
  * -------------------
- * The desktop app spawns the NUVRO AI server as a child process. On quit the
+ * The desktop app spawns the QUILLIX server as a child process. On quit the
  * old code called `child.kill()` once and returned. That is unbounded:
  *
  *   - `child.kill()` asks the child to stop. A child that is mid-write, stuck

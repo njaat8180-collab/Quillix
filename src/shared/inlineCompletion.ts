@@ -102,7 +102,7 @@ export function trimIncompleteTail(completion: string): string {
 const MAX_COMPLETION_CHARS = 1200;
 const FENCE = String.fromCharCode(96).repeat(3);
 
-/** Monaco language IDs that receive NUVRO AI ghost-text completions. Keep this
+/** Monaco language IDs that receive QUILLIX ghost-text completions. Keep this
  * aligned with EditorArea.getLanguage so supported files do not silently miss
  * the provider (notably HTML/CSS project files). */
 export const INLINE_COMPLETION_LANGUAGES = [

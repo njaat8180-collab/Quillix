@@ -2,8 +2,8 @@
   "name": "nuvro-ai",
   "private": true,
   "version": "1.2.0",
-  "description": "NUVRO AI coding agent: local Ollama, Sarvam, Universal cloud APIs, verified coding tools and secure Windows credentials",
-  "author": "NUVRO AI",
+  "description": "QUILLIX coding agent: local Ollama, Sarvam, Universal cloud APIs, verified coding tools and secure Windows credentials",
+  "author": "QUILLIX",
   "main": "dist/electron/main.cjs",
   "type": "module",
   "scripts": {

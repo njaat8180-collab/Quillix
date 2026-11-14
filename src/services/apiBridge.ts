@@ -759,7 +759,7 @@ export class ApiBridge {
     return null;
   }
 
-  /** True when running inside the NUVRO AI desktop app. */
+  /** True when running inside the QUILLIX desktop app. */
   public isDesktopApp(): boolean {
     return typeof window !== 'undefined' && !!window.quillixDesktop;
   }
@@ -1155,7 +1155,7 @@ export class ApiBridge {
     return res.json();
   }
 
-  /** URL for the built-in preview iframe (served by the NUVRO AI server). */
+  /** URL for the built-in preview iframe (served by the QUILLIX server). */
   public previewUrl(root: string, entry: string): string {
     const rel = root ? `${root}/${entry}` : entry;
     return `/preview/${rel.split('/').map(encodeURIComponent).join('/')}`;

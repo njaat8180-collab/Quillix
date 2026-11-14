@@ -150,7 +150,7 @@ describe('workspace lock — contention', () => {
     const lockError = failure as WorkspaceLockError;
     expect(lockError.code).toBe('timeout');
     expect(lockError.owner?.sessionId).toBe(owner.sessionId);
-    expect(lockError.message).toMatch(/locked by another NUVRO AI instance/i);
+    expect(lockError.message).toMatch(/locked by another QUILLIX instance/i);
     expect(lockError.message).not.toMatch(/api[_-]?key|secret/i);
   });
 
@@ -266,7 +266,7 @@ describe('workspace lock — write protection', () => {
     foreignOwner(root);
     const guard = assertWorkspaceWritable(root);
     expect(guard.ok).toBe(false);
-    expect(guard.error).toMatch(/locked by another NUVRO AI instance/i);
+    expect(guard.error).toMatch(/locked by another QUILLIX instance/i);
     expect(guard.owner?.username).toBe('other-instance');
   });
 
@@ -286,7 +286,7 @@ describe('workspace lock — write protection', () => {
     const owner = foreignOwner(root);
     const blockedWrite = manager.writeFile('existing.txt', 'overwritten');
     expect(blockedWrite.success).toBe(false);
-    expect(blockedWrite.error).toMatch(/locked by another NUVRO AI instance/i);
+    expect(blockedWrite.error).toMatch(/locked by another QUILLIX instance/i);
     expect(fs.readFileSync(path.join(root, 'existing.txt'), 'utf8')).toBe('original');
 
     expect(manager.createFile('new.txt', 'x').success).toBe(false);

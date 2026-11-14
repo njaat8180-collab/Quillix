@@ -159,7 +159,7 @@ export class NodeDebugger {
   }
 
   private resolveNodeRuntime(): string {
-    // Electron's process.execPath is NUVRO AI.exe, not node.exe. Prefer an
+    // Electron's process.execPath is QUILLIX.exe, not node.exe. Prefer an
     // explicitly supplied Node runtime, then common Windows installations,
     // and finally PATH resolution. This makes the packaged debugger work when
     // the Electron-launched process has a reduced or stale PATH.

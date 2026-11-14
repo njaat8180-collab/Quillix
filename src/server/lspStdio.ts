@@ -85,7 +85,6 @@ export class LspStdioClient {
   private nextId = 1;
   private version = 0;
   private closed = false;
-  private stderr = '';
   private capabilities: any = {};
   private readonly onClosed?: () => void;
 
@@ -105,9 +104,10 @@ export class LspStdioClient {
       env: safeEnvironment(),
     });
     this.child.stdout.on('data', (chunk: Buffer) => this.consume(chunk));
-    this.child.stderr.on('data', (chunk: Buffer) => { this.stderr = `${this.stderr}${chunk.toString('utf8')}`.slice(-4000); });
     this.child.on('error', error => this.failAll(new Error(`LSP process failed: ${error.message}`)));
-    this.child.on('exit', (code, signal) => this.failAll(new Error(`LSP process exited (code ${code ?? 'unknown'}, signal ${signal ?? 'none'}).${this.stderr ? ` ${this.stderr.trim()}` : ''}`)));
+    // Language servers are workspace extensions; their stderr can contain
+    // paths and environment secrets, so never forward it through tool errors.
+    this.child.on('exit', (code, signal) => this.failAll(new Error(`LSP process exited (code ${code ?? 'unknown'}, signal ${signal ?? 'none'}).`)));
   }
 
   private failAll(error: Error): void {
@@ -226,7 +226,7 @@ export class LspStdioClient {
           publishDiagnostics: { relatedInformation: true },
         },
       },
-      clientInfo: { name: 'NUVRO AI', version: '1.2.0' },
+      clientInfo: { name: 'QUILLIX', version: '1.2.0' },
     });
     this.capabilities = result?.capabilities || {};
     this.notify('initialized', {});

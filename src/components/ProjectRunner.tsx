@@ -208,7 +208,7 @@ export const ProjectRunner: React.FC<ProjectRunnerProps> = ({ workspaceRoot, ref
                   disabled={disabled}
                   className="q-transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold text-white"
                   style={{ background: 'var(--accent)' }}
-                  title="Open the website in the built-in NUVRO AI preview"
+                  title="Open the website in the built-in QUILLIX preview"
                 >
                   <MonitorPlay size={12} /> Preview
                 </button>

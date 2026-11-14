@@ -1,4 +1,4 @@
-// NUVRO AI Component Animation Presets
+// QUILLIX Component Animation Presets
 // Ready-to-use animation configurations for specific components
 
 import { Variants } from 'motion/react';

@@ -1,15 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ChevronRight, 
-  ChevronLeft, 
-  Check, 
-  X, 
-  FolderOpen, 
-  Cloud, 
-  Cpu, 
-  Zap, 
-  Terminal, 
+import {
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  X,
+  FolderOpen,
+  Cloud,
+  Cpu,
+  Zap,
+  Terminal,
   MessageSquare,
   Settings,
   ArrowRight,
@@ -31,7 +31,7 @@ interface OnboardingFlowProps {
   onSkip: () => void;
 }
 
-type OnboardingStep = 
+type OnboardingStep =
   | 'welcome'
   | 'workspace'
   | 'provider'
@@ -60,11 +60,11 @@ const cardVariants = {
   exit: { opacity: 0, y: -20, transition: { duration: 0.2 } },
 };
 
-export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ 
-  settings, 
-  onSettingsChanged, 
-  onComplete, 
-  onSkip 
+export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
+  settings,
+  onSettingsChanged,
+  onComplete,
+  onSkip
 }) => {
   const { theme } = useTheme();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('welcome');
@@ -166,10 +166,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
             <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>
               <Sparkles size={32} />
             </div>
-            <h2 className="text-2xl font-bold">Welcome to NUVRO AI</h2>
+            <h2 className="text-2xl font-bold">Welcome to QUILLIX</h2>
             <p className="text-[var(--text-muted)] max-w-md mx-auto leading-relaxed">
-              NUVRO AI is your local-first AI coding agent. It runs on your machine with Ollama, 
-              connects to cloud providers when you need them, and gives you a full development 
+              QUILLIX is your local-first AI coding agent. It runs on your machine with Ollama,
+              connects to cloud providers when you need them, and gives you a full development
               environment: editor, terminal, Git, and autonomous agent workflows.
             </p>
             <div className="grid grid-cols-3 gap-3 text-sm" style={{ marginTop: '1rem' }}>
@@ -197,7 +197,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
           <motion.div variants={cardVariants} className="space-y-6">
             <h2 className="text-xl font-bold">Choose Your Workspace</h2>
             <p className="text-[var(--text-muted)]">
-              NUVRO AI works with a folder on your computer. This is where your code lives and where 
+              QUILLIX works with a folder on your computer. This is where your code lives and where
               the agent will read, write, and run files.
             </p>
             <div className="space-y-3">
@@ -236,10 +236,10 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
           <motion.div variants={cardVariants} className="space-y-6">
             <h2 className="text-xl font-bold">Choose Your AI Provider</h2>
             <p className="text-[var(--text-muted)]">
-              NUVRO AI runs locally with Ollama by default. Add a cloud provider for more models 
+              QUILLIX runs locally with Ollama by default. Add a cloud provider for more models
               or when you need extra capacity.
             </p>
-            
+
             <div className="grid grid-cols-2 gap-3">
               {[
                 { id: 'ollama', label: 'Ollama (Local)', desc: 'Free, private, runs on your machine', icon: <Cpu size={20} />, needsKey: false, recommended: true },
@@ -306,7 +306,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
               </div>
               {selectedProvider === 'ollama' && (
                 <p className="text-sm text-[var(--text-muted)]">
-                  Make sure Ollama is running: <code className="bg-[var(--bg)] px-1 rounded">ollama serve</code>. 
+                  Make sure Ollama is running: <code className="bg-[var(--bg)] px-1 rounded">ollama serve</code>.
                   Default model: <code className="bg-[var(--bg)] px-1 rounded">qwen2.5-coder:3b</code>.
                 </p>
               )}
@@ -324,9 +324,9 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
           <motion.div variants={cardVariants} className="space-y-6">
             <h2 className="text-xl font-bold">Understand Chat Modes</h2>
             <p className="text-[var(--text-muted)]">
-              NUVRO AI has four modes. Switch between them in the composer or with <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)] text-[11px]">Cmd+M</kbd>.
+              QUILLIX has four modes. Switch between them in the composer or with <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)] text-[11px]">Cmd+M</kbd>.
             </p>
-            
+
             <div className="space-y-3">
               {[
                 { id: 'chat', label: 'Chat', desc: 'Ask questions, get explanations, no code changes', icon: <MessageSquare size={18} />, color: 'var(--accent)', key: 'Chat' },
@@ -366,7 +366,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
             <p className="text-[var(--text-muted)]">
               Press <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)] text-[11px]">Cmd+K</kbd> anytime to open the Command Palette with all actions.
             </p>
-            
+
             <div className="space-y-2">
               {[
                 { keys: ['Cmd', 'K'], desc: 'Open Command Palette' },
@@ -400,18 +400,18 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
             </div>
             <h2 className="text-2xl font-bold">You're Ready!</h2>
             <p className="text-[var(--text-muted)] max-w-md mx-auto leading-relaxed">
-              NUVRO AI is set up and ready to go. Open a workspace, pick a mode, and start coding 
+              QUILLIX is set up and ready to go. Open a workspace, pick a mode, and start coding
               with your AI pair programmer.
             </p>
             <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
-              <button 
+              <button
                 onClick={handleComplete}
                 className="px-4 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
                 style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
               >
                 <ArrowRight size={18} /> Start Coding
               </button>
-              <button 
+              <button
                 onClick={() => { onSettingsChanged({ hasCompletedOnboarding: true }); onComplete(); }}
                 className="px-4 py-3 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border border-[var(--border)]"
                 style={{ background: 'var(--surface)', color: 'var(--text)' }}
@@ -440,7 +440,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
           <div className="px-6 py-4 border-b border-[var(--border)]">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold">Setup Wizard</h3>
-              <button 
+              <button
                 onClick={handleSkip}
                 className="p-1 rounded-lg hover:bg-[var(--surface)] text-[var(--text-muted)] transition-colors"
                 aria-label="Skip onboarding"

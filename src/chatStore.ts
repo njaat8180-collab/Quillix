@@ -50,7 +50,7 @@ export function deleteChat(id: string): StoredChat[] {
 
 export function makeChatTitle(firstMessage: string): string {
   const clean = firstMessage.replace(/\s+/g, ' ').trim();
-  if (!clean) return 'New chat';
+  if (!clean) return 'QuickFix';
   return clean.length > 48 ? `${clean.slice(0, 48)}…` : clean;
 }
 
@@ -58,7 +58,7 @@ export function createChat(firstMessage?: string): StoredChat {
   const now = Date.now();
   return {
     id: `chat_${now}_${Math.random().toString(36).slice(2, 7)}`,
-    title: firstMessage ? makeChatTitle(firstMessage) : 'New chat',
+    title: firstMessage ? makeChatTitle(firstMessage) : 'QuickFix',
     createdAt: now,
     updatedAt: now,
     messages: [],

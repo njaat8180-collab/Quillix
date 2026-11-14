@@ -59,7 +59,7 @@ class RecordingProvider implements AIProvider {
   }
 }
 
-describe('NUVRO AI tool-call contract (deterministic structured format)', () => {
+describe('QUILLIX tool-call contract (deterministic structured format)', () => {
   let testDir: string;
   let workspace: WorkspaceManager;
   let memory: ProjectMemory;

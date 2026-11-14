@@ -77,7 +77,7 @@ export function repairBrowserStyleContract(
     additions.push('@keyframes quillix-reveal { from { opacity: .7; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }', '.quillix-reveal { animation: quillix-reveal 400ms ease both; }');
   }
   if (additions.length) {
-    content = `${content.trimEnd()}\n\n/* NUVRO AI verifier-backed quality contract */\n${additions.join('\n')}\n`;
+    content = `${content.trimEnd()}\n\n/* QUILLIX verifier-backed quality contract */\n${additions.join('\n')}\n`;
   }
   return { content, changed: content !== css };
 }
@@ -116,7 +116,7 @@ export function repairThemeToggleContract(
   if (!/\bid\s*=\s*["']theme-toggle["']/i.test(html) || /\bclassList\.toggle\s*\(/.test(script)) {
     return { content: script, changed: false };
   }
-  const addition = `\n\n// NUVRO AI verifier-backed theme toggle contract\ndocument.addEventListener('DOMContentLoaded', () => {\n  const toggle = document.getElementById('theme-toggle');\n  if (toggle) toggle.addEventListener('click', () => document.body.classList.toggle('theme-dark'));\n});\n`;
+  const addition = `\n\n// QUILLIX verifier-backed theme toggle contract\ndocument.addEventListener('DOMContentLoaded', () => {\n  const toggle = document.getElementById('theme-toggle');\n  if (toggle) toggle.addEventListener('click', () => document.body.classList.toggle('theme-dark'));\n});\n`;
   return { content: `${script.trimEnd()}${addition}`, changed: true };
 }
 
@@ -202,7 +202,7 @@ function attribute(attributes: string, name: string): string | undefined {
 /**
  * Repair a model-invented directory on a core browser link only when the
  * referenced file is missing and the matching canonical project-root file is
- * present. This keeps preview links aligned with NUVRO AI's plain-web layout
+ * present. This keeps preview links aligned with QUILLIX's plain-web layout
  * without guessing, rewriting valid nested assets, or touching remote URLs.
  */
 export function repairMissingBrowserCoreReferences(

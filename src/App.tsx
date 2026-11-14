@@ -1,4 +1,4 @@
-﻿import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { TopHeader, OllamaState, MainView } from './components/TopHeader.js';
@@ -155,7 +155,7 @@ export default function App() {
     setConversationModeWorkspaceRoot(workspaceRoot);
   }, [workspaceRoot]);
 
-  // Keep other NUVRO AI windows on the same workspace in sync with the visible
+  // Keep other QUILLIX windows on the same workspace in sync with the visible
   // mode lock. A remote switch to Chat also cancels this window's active run.
   useEffect(() => {
     if (!workspaceRoot) return;
@@ -170,8 +170,8 @@ export default function App() {
       api.setConversationModeContext(workspaceRoot, next);
       setConversationMode(next);
       setAgentBanner(next === 'chat'
-        ? 'Chat mode selected in another NUVRO AI window. Workspace tools are disabled.'
-        : 'Agent mode selected in another NUVRO AI window.');
+        ? 'Chat mode selected in another QUILLIX window. Workspace tools are disabled.'
+        : 'Agent mode selected in another QUILLIX window.');
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -189,7 +189,7 @@ export default function App() {
     setConversationMode(next);
     const saved = writeConversationMode(workspaceRoot, next, () => window.localStorage);
     if (!saved) {
-      setAgentBanner(`${next === 'chat' ? 'Chat' : 'Agent'} mode is active for this session, but browser storage is unavailable; after reload NUVRO AI will fail safe into Chat mode.`);
+      setAgentBanner(`${next === 'chat' ? 'Chat' : 'Agent'} mode is active for this session, but browser storage is unavailable; after reload QUILLIX will fail safe into Chat mode.`);
     } else if (next === 'chat') setAgentBanner('Chat mode: tools and workspace changes are disabled.');
     else setAgentBanner('Agent mode: actionable requests will edit and verify the active project.');
   }, [workspaceRoot, conversationModeReady, isWorking]);
@@ -275,11 +275,11 @@ export default function App() {
         setOllama({
           state: 'disconnected',
           details:
-            'NUVRO AI cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.',
+            'QUILLIX cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.',
         });
       }
     } catch {
-      setOllama({ state: 'disconnected', details: 'NUVRO AI cannot connect to Ollama.' });
+      setOllama({ state: 'disconnected', details: 'QUILLIX cannot connect to Ollama.' });
     } finally {
       window.clearTimeout(timeout);
       ollamaCheckInFlight.current = false;
@@ -288,7 +288,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshOllama();
-    // Ollama can be started after NUVRO AI, and a model may finish loading
+    // Ollama can be started after QUILLIX, and a model may finish loading
     // after the first probe. Keep the badge truthful without hammering the
     // service; the in-flight guard makes the interval idempotent.
     const timer = window.setInterval(() => { void refreshOllama(); }, 15000);
@@ -329,7 +329,7 @@ export default function App() {
       const existing = prev.find((c) => c.id === chatId);
       const updated: StoredChat = {
         id: chatId,
-        title: existing?.title && existing.title !== 'New chat' ? existing.title : title,
+        title: existing?.title && existing.title !== 'QuickFix' ? existing.title : title,
         createdAt: existing?.createdAt || Date.now(),
         updatedAt: Date.now(),
         messages: msgs,
@@ -556,7 +556,7 @@ export default function App() {
               const act: AgentActivity = data.activity;
               if (act.type === 'editing_file' || act.type === 'applying_patch') {
                 const m = /(?:changes for|Applied changes to|Change staged for review:\s*)(.+)$/.exec(act.message);
-                if (m) setAgentBanner(`NUVRO AI is editing ${m[1].trim()}…`);
+                if (m) setAgentBanner(`QUILLIX is editing ${m[1].trim()}…`);
               } else if (act.type === 'running_command' || act.type === 'running_tests') {
                 setAgentBanner(act.message);
               } else if (act.type === 'thinking' || act.type === 'planning') {
@@ -572,7 +572,7 @@ export default function App() {
               // Watch the coding process live: open the file in the editor
               // (visible whenever the workspace view is open).
               setFocusFileRequest({ path: data.patch.filePath, nonce: Date.now() });
-              setAgentBanner(`NUVRO AI is editing ${data.patch.filePath}…`);
+              setAgentBanner(`QUILLIX is editing ${data.patch.filePath}…`);
             } else if (data.event === 'approval') {
               setPendingApproval({ approvalId: data.approvalId, request: data.request });
             } else if (data.event === 'done') {
@@ -774,7 +774,7 @@ export default function App() {
       }
       if (!folder) return;
       const res = await api.setRoot(folder);
-      if (!res.success) throw new Error(res.error || 'NUVRO AI could not set that folder as the workspace.');
+      if (!res.success) throw new Error(res.error || 'QUILLIX could not set that folder as the workspace.');
 
       const selectedRoot = res.path || folder;
       setWorkspaceRoot(selectedRoot);
@@ -833,7 +833,7 @@ export default function App() {
     setView('workspace');
     setAgentFocusSignal(value => value + 1);
     setTimeout(() => {
-      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message NUVRO AI"]')?.focus();
+      document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message QUILLIX"]')?.focus();
     }, 50);
   };
 

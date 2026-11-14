@@ -47,7 +47,7 @@ describe('task rollback journal', () => {
     const nextSession = new TaskStateStore(workspace);
     expect(nextSession.getLatestIncomplete()).toBeUndefined();
     expect(nextSession.getTask(task.id)).toMatchObject({ status: 'cancelled', finalText: expect.stringContaining('interrupted') });
-    expect(nextSession.getTask(task.id)?.errors).toContain('Interrupted by a previous NUVRO AI session.');
+    expect(nextSession.getTask(task.id)?.errors).toContain('Interrupted by a previous QUILLIX session.');
     expect(nextSession.getTask(task.id)?.observability.finishedAt).toEqual(expect.any(Number));
   });
 

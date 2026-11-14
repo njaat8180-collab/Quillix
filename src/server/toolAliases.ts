@@ -1,5 +1,5 @@
 /**
- * NUVRO AI Tool Name & Argument Aliases
+ * QUILLIX Tool Name & Argument Aliases
  * ====================================
  * Small local models name tools and arguments inconsistently — "file_write"
  * instead of "write_file", "path" instead of "filePath". Before a tool call is

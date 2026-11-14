@@ -16,6 +16,7 @@ import {
   withinSearchBudget,
 } from '../shared/webSearchPolicy.js';
 import { readEnvNumber } from '../shared/envNumbers.js';
+import { redactSensitiveText } from '../shared/secretRedaction.js';
 
 export type TavilyFinding = 'supported' | 'possibly_stale' | 'contradicted' | 'unverified' | 'offline';
 export type TavilySource = {
@@ -95,6 +96,31 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 64;
 const cache = new Map<string, CacheRecord>();
 const TAVILY_MAX_ATTEMPTS = 2;
+
+function safeTavilyError(action: 'verification' | 'search' | 'extract', error: unknown): Error {
+  const value = error as any;
+  const status = Number(value?.status ?? value?.statusCode ?? value?.response?.status);
+  if (Number.isInteger(status) && status >= 400 && status <= 599) {
+    return new Error(`Tavily ${action} failed (HTTP ${status}). Check the API key, account access and endpoint.`);
+  }
+  const detail = redactSensitiveText(String(value?.message || error || ''));
+  if (/^Save a Tavily API key first/i.test(detail)) return new Error(detail);
+  return new Error(`Tavily ${action} failed. Check the API key, endpoint and network connection.`);
+}
+
+function configuredTavilyBaseUrl(): string | undefined {
+  const raw = process.env.QUILLIX_TAVILY_BASE_URL?.trim();
+  if (!raw) return undefined;
+  let url: URL;
+  try { url = new URL(raw); }
+  catch { throw new Error('QUILLIX_TAVILY_BASE_URL must be a valid HTTPS URL or a loopback HTTP URL.'); }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname.toLowerCase());
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
+      url.username || url.password || url.search || url.hash) {
+    throw new Error('QUILLIX_TAVILY_BASE_URL must use HTTPS (HTTP is allowed only on loopback) and must not contain credentials, query, or fragment data.');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
 
 /** Tavily's current pay-as-you-go reference is $0.008 per credit. Allow an
  * account-specific override because plan pricing and currency can differ. */
@@ -299,7 +325,7 @@ export class TavilyVerificationService {
     this.readApiKey = options.readApiKey || readTavilyKey;
     // QUILLIX_TAVILY_BASE_URL allows a corporate proxy, a self-hosted gateway
     // or a local test double; unset means the real api.tavily.com.
-    const baseUrl = process.env.QUILLIX_TAVILY_BASE_URL?.trim();
+    const baseUrl = configuredTavilyBaseUrl();
     this.clientFactory = options.clientFactory || ((apiKey: string) => tavily({ apiKey, clientSource: 'quillix', ...(baseUrl ? { apiBaseURL: baseUrl } : {}) }));
   }
 
@@ -371,7 +397,7 @@ export class TavilyVerificationService {
       const usage = { searches: 1, extracts: extracts ? 1 : 0, credits: Number(search.usage?.credits || 0) + Number(extracts?.usage?.credits || 0), estimatedCostUsd: (Number(search.usage?.credits || 0) + Number(extracts?.usage?.credits || 0)) * tavilyCostPerCreditUsd() };
       recordUsage(usage.searches, usage.extracts, usage.credits, this.stateDirectory);
       const suggestedAction = evidence.finding === 'possibly_stale' || evidence.finding === 'contradicted'
-        ? 'Review the cited official source, propose the smallest correction, then use NUVRO AI approval and run the relevant tests before applying it.'
+        ? 'Review the cited official source, propose the smallest correction, then use QUILLIX approval and run the relevant tests before applying it.'
         : evidence.finding === 'unverified'
           ? 'Do not present this claim as current; ask for a trusted URL or a narrower query.'
           : undefined;
@@ -381,7 +407,7 @@ export class TavilyVerificationService {
       while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
       return result;
     } catch (error: any) {
-      throw new Error(`Tavily verification failed: ${String(error?.message || error)}`);
+      throw safeTavilyError('verification', error);
     }
   }
 
@@ -424,7 +450,7 @@ export class TavilyVerificationService {
       this.boundedSearchCache();
       return result;
     } catch (error: any) {
-      throw new Error(`Tavily search failed: ${String(error?.message || error)}`);
+      throw safeTavilyError('search', error);
     }
   }
 
@@ -464,7 +490,7 @@ export class TavilyVerificationService {
       this.boundedSearchCache();
       return result;
     } catch (error: any) {
-      throw new Error(`Tavily extract failed: ${String(error?.message || error)}`);
+      throw safeTavilyError('extract', error);
     }
   }
 }

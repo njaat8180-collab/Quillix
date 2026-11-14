@@ -129,8 +129,8 @@ export function dpapi(operation: 'protect' | 'unprotect', input: string, runtime
     const errorType = /DPAPI_ERROR:([A-Za-z][A-Za-z0-9]{0,80})/.exec(String(result.stderr ?? ''))?.[1];
     if (errorType) lastDpapiType = errorType;
   }
-  if (!foundPowerShell) throw new Error('Windows PowerShell was not found. Check System32\\WindowsPowerShell\\v1.0 or install PowerShell, then restart NUVRO AI. No API key was saved.');
-  if (timedOut) throw new Error('Windows secure storage timed out. Restart NUVRO AI under your normal signed-in Windows account and try again. No API key was saved.');
+  if (!foundPowerShell) throw new Error('Windows PowerShell was not found. Check System32\\WindowsPowerShell\\v1.0 or install PowerShell, then restart QUILLIX. No API key was saved.');
+  if (timedOut) throw new Error('Windows secure storage timed out. Restart QUILLIX under your normal signed-in Windows account and try again. No API key was saved.');
   if (lastDpapiType === 'ProtectedDataTypeUnavailable') {
     throw new Error('Windows DPAPI libraries could not be loaded by PowerShell. Check your Windows .NET/PowerShell installation. No API key was saved.');
   }
@@ -178,7 +178,7 @@ function loadKey(): string {
   if (process.env.NODE_ENV === 'test' && process.env.SARVAM_API_KEY?.trim()) {
     return process.env.SARVAM_API_KEY.trim();
   }
-  // A key entered in NUVRO AI takes precedence over an old environment key.
+  // A key entered in QUILLIX takes precedence over an old environment key.
   // Otherwise Save & Connect can succeed while the agent still uses another key.
   if (fs.existsSync(keyFile)) {
     const record = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
@@ -433,7 +433,7 @@ export class SarvamProvider implements AIProvider {
       const result = json?.choices?.[0]?.message;
       if (!result) throw new Error('Sarvam returned an empty response.');
       if (json?.choices?.[0]?.finish_reason === 'length') {
-        throw new Error(`Sarvam output was truncated before a complete tool call (max_tokens=${tokenLimit}, reasoning disabled); no tool was executed. NUVRO AI will retry the current file with a compact single-tool request. Increase SARVAM_MAX_TOKENS only if your Sarvam plan permits.`);
+        throw new Error(`Sarvam output was truncated before a complete tool call (max_tokens=${tokenLimit}, reasoning disabled); no tool was executed. QUILLIX will retry the current file with a compact single-tool request. Increase SARVAM_MAX_TOKENS only if your Sarvam plan permits.`);
       }
       const toolCalls = parseNativeToolCalls(result.tool_calls, tools);
       // Some providers return content as typed text parts. Empty content is
@@ -626,7 +626,7 @@ export class ProviderRouter implements AIProvider {
     if (!this.isRateLimitFailure(error)) return;
     const hintedMs = Number((error as any)?.retryAfterMs);
     // Overdrive Mode removes app-imposed cooldowns: only a provider's own
-    // Retry-After value may gate the next request. NUVRO AI's 5s/15s
+    // Retry-After value may gate the next request. QUILLIX's 5s/15s
     // fallback would otherwise stall every following turn after one exhausted
     // quota window, which looks exactly like a hang.
     if (this.settings.get().overdriveMode === true && !Number.isFinite(hintedMs)) return;

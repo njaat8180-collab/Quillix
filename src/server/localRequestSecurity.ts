@@ -1,7 +1,7 @@
 /**
  * A server bound to loopback is still vulnerable to DNS rebinding and
  * cross-origin browser requests. Check Host and Origin in addition to
- * the socket address before allowing access to NUVRO AI's powerful API.
+ * the socket address before allowing access to QUILLIX's powerful API.
  */
 export function validateLocalApiRequest(host: string | undefined, origin: string | undefined, port: number): boolean {
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);

@@ -1,5 +1,5 @@
 /**
- * NUVRO AI — Electron preload.
+ * QUILLIX — Electron preload.
  *
  * Bridges the tiny set of desktop-only capabilities (native dialogs) into the
  * hardened sandboxed renderer. Everything else goes through the local HTTP
@@ -8,7 +8,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('quillixDesktop', {
-  /** True when running inside the NUVRO AI desktop app. */
+  /** True when running inside the QUILLIX desktop app. */
   isDesktop: true,
   /**
    * Opens the native OS folder picker and resolves with the selected absolute

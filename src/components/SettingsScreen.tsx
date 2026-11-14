@@ -68,7 +68,7 @@ const FailoverKeyPanel: React.FC<{provider: 'openai'|'groq'|'grok'|'sarvam'|'nvi
   const clear = async () => { setBusy(true); setMessage(''); try { const r=await fetch(`/api/providers/${provider}/failover-keys`,{method:'DELETE'}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'Could not remove backup keys.'); onSettingsChanged({...settings, [`${provider}KeyPoolCount`]:0} as QuillixSettings); setMessage('All encrypted backup keys removed.'); } catch (e:any) { setMessage(e?.message||'Could not remove backup keys.'); } finally { setBusy(false); } };
   return <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5 space-y-2">
     <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold">Optional {label} backup keys</span><span className="text-[10px] text-[var(--text-muted)]">{count} encrypted backup{count === 1 ? '' : 's'}</span></div>
-    <p className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">Backup keys are encrypted for this Windows account. NUVRO AI tries the next key only when the provider rejects the current key (HTTP 401/403); it never rotates keys for rate limits because quotas may be shared.</p>
+    <p className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">Backup keys are encrypted for this Windows account. QUILLIX tries the next key only when the provider rejects the current key (HTTP 401/403); it never rotates keys for rate limits because quotas may be shared.</p>
     <div className="flex gap-2"><input aria-label={`${label} backup API key`} type="password" autoComplete="off" value={key} onChange={e=>setKey(e.target.value)} placeholder="Add a backup key" className="q-settings-field min-w-0 flex-1 rounded-lg border bg-[var(--input)] px-2.5 py-1.5 text-[12px]" /><button type="button" className="q-button-outline rounded-lg px-2.5 py-1.5 text-[11px] disabled:opacity-50" disabled={busy||!key.trim()} onClick={add}>{busy?'Saving…':'Add key'}</button></div>
     {count > 0 && <button type="button" className="text-[10.5px] text-[var(--danger)] hover:underline disabled:opacity-50" disabled={busy} onClick={clear}>Remove backup keys</button>}
     {message && <p role="status" className="text-[10.5px] leading-relaxed" style={{color: /could not|failed|invalid|error/i.test(message) ? 'var(--danger)' : 'var(--success)'}}>{message}</p>}
@@ -345,12 +345,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         setTestMessage(
           res.status?.details ||
             res.error ||
-            'NUVRO AI cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.'
+            'QUILLIX cannot connect to Ollama.\nStart Ollama and make sure your local Qwen model is installed.'
         );
       }
     } catch (err: any) {
       setTestState('disconnected');
-      setTestMessage(err?.message || 'NUVRO AI cannot connect to Ollama.');
+      setTestMessage(err?.message || 'QUILLIX cannot connect to Ollama.');
     }
   };
 
@@ -521,7 +521,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </button>
                 </div>
                 {['openai','groq','grok'].includes(settings.aiProvider || '') && <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2" aria-label="Provider account model catalog">
-                  <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-medium">Models available to your API key</p><p className="text-[10.5px] text-[var(--text-muted)]">NUVRO AI reads the provider’s live model catalog.</p></div><button type="button" className="q-button-outline rounded-xl px-3 py-2 text-[11px] disabled:opacity-50" disabled={accountModelsBusy} onClick={discoverAccountModels}>{accountModelsBusy?'Loading…':'Discover models'}</button></div>
+                  <div className="flex items-center justify-between gap-3"><div><p className="text-[12px] font-medium">Models available to your API key</p><p className="text-[10.5px] text-[var(--text-muted)]">QUILLIX reads the provider’s live model catalog.</p></div><button type="button" className="q-button-outline rounded-xl px-3 py-2 text-[11px] disabled:opacity-50" disabled={accountModelsBusy} onClick={discoverAccountModels}>{accountModelsBusy?'Loading…':'Discover models'}</button></div>
                   {accountModels.length>0&&<div className="flex gap-2"><select aria-label="Available provider models" className="q-settings-field min-w-0 flex-1 rounded-xl border bg-[var(--input)] px-3 py-2 text-[12px] font-mono" value={accountModel} onChange={event=>setAccountModel(event.target.value)}>{accountModels.map(model=><option key={model.id} value={model.id}>{formatProviderModelLabel(model)}</option>)}</select><button type="button" className="q-button-primary shrink-0 rounded-xl px-3 py-2 text-[11px] disabled:opacity-50" disabled={accountModelsBusy||!accountModel} onClick={useAccountModel}>Use model</button></div>}
                   {accountModelsMessage&&<p role="status" className="text-[10.5px] text-[var(--text-muted)]">{accountModelsMessage}</p>}
                 </div>}
@@ -705,7 +705,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="text-[11px] font-semibold">Optional failover keys</span>
                       <span className="text-[10px] text-[var(--text-muted)]">{settings.universalKeyPoolCount || 0} encrypted backup{(settings.universalKeyPoolCount || 0) === 1 ? '' : 's'}</span>
                     </div>
-                    <p className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">On rate-limit or temporary provider failure, NUVRO AI can try the next key. Account-level quotas are still shared; invalid-key errors never rotate automatically.</p>
+                    <p className="text-[10.5px] leading-relaxed text-[var(--text-muted)]">On rate-limit or temporary provider failure, QUILLIX can try the next key. Account-level quotas are still shared; invalid-key errors never rotate automatically.</p>
                     <div className="flex gap-2">
                       <input aria-label="Universal API failover key" type="password" autoComplete="off" value={failoverKey} onChange={e=>setFailoverKey(e.target.value)} placeholder="Add another key for optional failover" className="q-settings-field min-w-0 flex-1 rounded-lg border bg-[var(--input)] px-2.5 py-1.5 text-[12px]" />
                       <button type="button" className="q-button-outline rounded-lg px-2.5 py-1.5 text-[11px] disabled:opacity-50" disabled={failoverSaving || !failoverKey.trim() || !universalKeyMatchesSelection} onClick={async()=>{
@@ -871,7 +871,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </div>
                   {sarvamKeyError && (
                     <p role="alert" className="text-[11px] leading-5 rounded-xl border px-3 py-2" style={{color:'var(--danger)',borderColor:'var(--danger)'}}>
-                      {sarvamKeyError} To diagnose secure storage without using your real key, run <code>npm run check:sarvam-storage</code> in the NUVRO AI folder.
+                      {sarvamKeyError} To diagnose secure storage without using your real key, run <code>npm run check:sarvam-storage</code> in the QUILLIX folder.
                     </p>
                   )}
                   <p className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]"><ShieldCheck size={13} /> Connection: {sarvamConnection === 'connected' ? 'Verified by test' : sarvamConnection === 'checking' ? 'Checking…' : sarvamConnection === 'failed' ? 'Test failed' : 'Not yet verified'}</p>
@@ -979,7 +979,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             Turbo Speed Mode
                           </span>
                         </div>
-                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Removes NUVRO AI’s extra wait between cloud model calls. Provider generation time, hardware speed, and rate-limit cooldowns still apply.</p>
+                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Removes QUILLIX’s extra wait between cloud model calls. Provider generation time, hardware speed, and rate-limit cooldowns still apply.</p>
                       </div>
                       <button
                         type="button"
@@ -1000,7 +1000,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     {settings.turboSpeedMode === true && (
                       <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-[11px] text-[var(--accent)] flex items-center gap-2">
                         <span className="shrink-0"><ArrowUpRight size={12} /></span>
-                         <span>Turbo Speed is active: NUVRO AI waits at least 1s between cloud calls. Provider pacing headers can require a longer wait. Local Ollama speed depends on the selected model and hardware; quotas and Retry-After cooldowns remain enforced.</span>
+                         <span>Turbo Speed is active: QUILLIX waits at least 1s between cloud calls. Provider pacing headers can require a longer wait. Local Ollama speed depends on the selected model and hardware; quotas and Retry-After cooldowns remain enforced.</span>
                       </div>
                     )}
                   </div>
@@ -1097,7 +1097,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold">Run project checks after each save</p>
-                  <p className="text-[11px] text-[var(--text-muted)]">When a file is saved, NUVRO AI runs this project's own <span className="font-mono">lint</span> (or <span className="font-mono">test</span>) script and shows the result in Build &amp; Tests. Strictly opt-in; Offline Mode pauses it.</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">When a file is saved, QUILLIX runs this project's own <span className="font-mono">lint</span> (or <span className="font-mono">test</span>) script and shows the result in Build &amp; Tests. Strictly opt-in; Offline Mode pauses it.</p>
                 </div>
                 <button
                   type="button"
@@ -1299,7 +1299,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <div className="space-y-3.5">
               <Toggle
                 label="Overdrive Mode"
-                description="Removes every NUVRO AI delay — request pacing, declared quota waits and resource pauses — so replies fire the moment they are ready. Only your AI provider's own latency and limits remain. Enable only after reading the confirmation below."
+                description="Removes every QUILLIX delay — request pacing, declared quota waits and resource pauses — so replies fire the moment they are ready. Only your AI provider's own latency and limits remain. Enable only after reading the confirmation below."
                 checked={settings.overdriveMode === true}
                 onChange={(v) => {
                   if (v) { setOverdriveApproval(true); return; }
@@ -1311,7 +1311,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               {settings.overdriveMode === true && !overdriveApproval && (
                 <p className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
                   <Zap size={12} className="text-[var(--accent)]" aria-hidden="true" />
-                  Overdrive is active: pacing, quota waits and resource pauses are off. Turbo Speed is superseded. If the provider rate-limits, NUVRO AI shows the hit immediately and retries the moment its window reopens.
+                  Overdrive is active: pacing, quota waits and resource pauses are off. Turbo Speed is superseded. If the provider rate-limits, QUILLIX shows the hit immediately and retries the moment its window reopens.
                 </p>
               )}
 
@@ -1329,7 +1329,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   >
                     <strong className="block text-[12.5px] font-semibold text-[var(--text)]">Turn on Overdrive Mode?</strong>
                     <ul className="mt-2 space-y-1 text-[11.5px] leading-relaxed text-[var(--text-muted)]">
-                      <li>Every NUVRO AI delay is removed: no pacing between requests, no app-side quota waits, no CPU/disk pause between turns.</li>
+                      <li>Every QUILLIX delay is removed: no pacing between requests, no app-side quota waits, no CPU/disk pause between turns.</li>
                       <li>Requests go straight to the provider — only the provider's own latency and rate limits remain.</li>
                       <li>When a provider rate limit is hit, the app shows it immediately and retries automatically the exact moment the provider's window reopens (using its Retry-After / reset headers).</li>
                       <li>Local Ollama work is unaffected — it never had app-side delays.</li>

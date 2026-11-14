@@ -1,5 +1,5 @@
 /**
- * NUVRO AI debug logging (opt-in).
+ * QUILLIX debug logging (opt-in).
  *
  * Set QUILLIX_DEBUG=1 before starting the server to trace the agent loop
  * end-to-end on stderr:

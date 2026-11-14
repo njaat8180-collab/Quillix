@@ -1,4 +1,4 @@
-// NUVRO AI Animation Variants - Core
+// QUILLIX Animation Variants - Core
 // Essential Framer Motion variants
 
 import { Variants, Transition } from 'motion/react';

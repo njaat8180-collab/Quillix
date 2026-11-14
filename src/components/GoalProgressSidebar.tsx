@@ -70,7 +70,7 @@ export const GoalProgressSidebar: React.FC<{
 
   if (loading) {
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[var(--bg)] p-3" aria-label="NUVRO AI goal progress">
+      <div className="flex h-full flex-col overflow-hidden bg-[var(--bg)] p-3" aria-label="QUILLIX goal progress">
         <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
           <strong className="font-bold text-[11px] text-[var(--text)]">Goal Progress</strong>
           <span className="text-[10px] font-mono text-[var(--text-muted)]">Loading…</span>
@@ -84,7 +84,7 @@ export const GoalProgressSidebar: React.FC<{
 
   if (!state) {
     return (
-      <div className="flex h-full flex-col overflow-hidden bg-[var(--bg)] p-3" aria-label="NUVRO AI goal progress">
+      <div className="flex h-full flex-col overflow-hidden bg-[var(--bg)] p-3" aria-label="QUILLIX goal progress">
         <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
           <strong className="font-bold text-[11px] text-[var(--text)]">Goal Progress</strong>
         </div>
@@ -96,7 +96,7 @@ export const GoalProgressSidebar: React.FC<{
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="NUVRO AI goal progress">
+    <div className="flex flex-col h-full overflow-hidden bg-[var(--bg)] text-[11px] text-[var(--text-muted)]" aria-label="QUILLIX goal progress">
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2">
         <div className="flex items-center gap-2">
           <Target size={13} className="text-[var(--accent)]" />

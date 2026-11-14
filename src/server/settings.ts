@@ -87,7 +87,7 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 }
 
 /**
- * Persistent, validated runtime settings for NUVRO AI.
+ * Persistent, validated runtime settings for QUILLIX.
  * Stored at ~/.quillix/settings.json so it survives restarts.
  */
 export class SettingsStore {
@@ -110,7 +110,7 @@ export class SettingsStore {
         this.settings = this.sanitize({ ...DEFAULT_SETTINGS, ...(raw as Partial<QuillixSettings>) });
       }
     } catch (err) {
-      console.warn('NUVRO AI: could not read settings file, using defaults.', err);
+      console.warn('QUILLIX: could not read settings file, using defaults.', err);
     }
   }
 
@@ -123,9 +123,9 @@ export class SettingsStore {
       fs.writeFileSync(tmp, JSON.stringify(this.settings, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       fs.renameSync(tmp, this.filePath);
     } catch {
-      throw new Error('Could not save NUVRO AI settings. Check your Windows profile and folder permissions.');
+      throw new Error('Could not save QUILLIX settings. Check your Windows profile and folder permissions.');
     } finally {
-      try { fs.unlinkSync(tmp); } catch (err: any) { if (!['ENOENT','ENOTDIR'].includes(err?.code)) console.warn('NUVRO AI: could not clean temporary settings file.'); }
+      try { fs.unlinkSync(tmp); } catch (err: any) { if (!['ENOENT','ENOTDIR'].includes(err?.code)) console.warn('QUILLIX: could not clean temporary settings file.'); }
     }
   }
 
@@ -135,7 +135,7 @@ export class SettingsStore {
       : DEFAULT_SETTINGS.universalPreset;
     const rawUniversalModel = typeof s.universalModel === 'string' ? s.universalModel.trim() : '';
     // Migrate the retired NVIDIA preset default on load so existing users do
-    // not keep receiving HTTP 410 after upgrading NUVRO AI.
+    // not keep receiving HTTP 410 after upgrading QUILLIX.
     const universalModel = universalPreset === 'nvidia-nim' && rawUniversalModel === 'meta/llama-3.1-8b-instruct'
       ? getProviderPreset('nvidia-nim').defaultModel
       : rawUniversalModel;

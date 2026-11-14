@@ -62,7 +62,7 @@ export const DiagnosticsModal: React.FC<DiagnosticsModalProps> = ({ isOpen, onCl
         {/* Content */}
         <div className="p-4 overflow-y-auto max-h-[70vh] space-y-3">
           <p className="text-[#8b949e] leading-relaxed">
-            Real environment audit for NUVRO AI runtime services, local toolchains, and AI backend configuration.
+            Real environment audit for QUILLIX runtime services, local toolchains, and AI backend configuration.
           </p>
 
           <div className="grid grid-cols-1 gap-2.5">

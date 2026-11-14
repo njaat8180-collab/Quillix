@@ -2,7 +2,7 @@ import type { ToolCall } from '../shared/types.js';
 import { normalizeToolName, normalizeToolArgs } from './toolAliases.js';
 
 /**
- * NUVRO AI Tool-Call Text Parser
+ * QUILLIX Tool-Call Text Parser
  *
  * Small local models such as qwen2.5-coder:3b can still fail to use Ollama's
  * native `tool_calls` field and instead WRITE the tool call as plain text:
@@ -215,7 +215,7 @@ function normalizeToolCallObject(
       (('arguments' in record || 'args' in record || 'parameters' in record) ? null : undefined));
   }
 
-  // NUVRO AI tool envelope, supporting {tool, arguments} and inline fields.
+  // QUILLIX tool envelope, supporting {tool, arguments} and inline fields.
   if (typeof record.tool === 'string' && record.tool.trim()) {
     const hasNested = 'arguments' in record || 'args' in record || 'parameters' in record;
     if (hasNested) {

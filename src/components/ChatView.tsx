@@ -195,7 +195,7 @@ export const ActivityFeed: React.FC<{ activities: AgentActivity[]; compact?: boo
       <div className="flex items-center justify-between mb-2">
         <span className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)]">
           <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          NUVRO AI is working…
+          QUILLIX is working…
         </span>
         <button
           onClick={() => setShowDetails(!showDetails)}

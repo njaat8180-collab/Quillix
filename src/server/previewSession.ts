@@ -39,7 +39,7 @@ export class PreviewSessionService {
   constructor(private readonly isServerReady: () => boolean = () => true) {}
 
   start(root: string, entry: string, validationError?: string): PreviewSessionInfo | { error: string } {
-    if (!this.isServerReady()) return { error: 'Preview server is unavailable. Check for a local port conflict and restart NUVRO AI.' };
+    if (!this.isServerReady()) return { error: 'Preview server is unavailable. Check for a local port conflict and restart QUILLIX.' };
     if (validationError) return { error: validationError };
     const target = `${path.resolve(root)}\0${entry}`;
     const existingId = this.activeByTarget.get(target);

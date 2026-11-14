@@ -60,7 +60,7 @@ export class ExtensionTools {
       } else data=await response.json();
       if(!data||data.error) throw new Error('MCP request failed.');return data.result;
     };
-    const initialized=await rpc('initialize',{protocolVersion:version,capabilities:{},clientInfo:{name:'NUVRO AI',version:'1.2.0'}});
+    const initialized=await rpc('initialize',{protocolVersion:version,capabilities:{},clientInfo:{name:'QUILLIX',version:'1.2.0'}});
     if(initialized.protocolVersion) {if(!['2024-11-05','2025-03-26','2025-06-18'].includes(initialized.protocolVersion))throw new Error('Unsupported MCP protocol version.');version=initialized.protocolVersion;}
     await rpc('notifications/initialized',{},true);
     const tools:any[]=[];let cursor:string|undefined;
@@ -80,14 +80,14 @@ export class ExtensionTools {
 
   /** Connect a local MCP server over stdio. This is allowed in Offline Mode,
    * unlike HTTP extensions, because no network is involved. The process is
-   * spawned without a shell and every tool still travels through NUVRO AI's
+   * spawned without a shell and every tool still travels through QUILLIX's
    * normal approval path at execution time. */
   async connectMCPStdio(id:string,command:string,args:string[]=[],environment:Record<string,string>={}) {
     if(!/^\w{1,40}$/.test(id)) throw new Error('Invalid MCP server ID.');
     if(this.stdioClients.has(id)) throw new Error('MCP stdio server already connected.');
     const client=new StdioMcpClient(command,args,environment);
     try {
-      const initialized=await client.request('initialize',{protocolVersion:MCP_STDIO_PROTOCOL_VERSION,capabilities:{},clientInfo:{name:'NUVRO AI',version:'1.2.0'}});
+      const initialized=await client.request('initialize',{protocolVersion:MCP_STDIO_PROTOCOL_VERSION,capabilities:{},clientInfo:{name:'QUILLIX',version:'1.2.0'}});
       const version=typeof initialized?.protocolVersion==='string'?initialized.protocolVersion:MCP_STDIO_PROTOCOL_VERSION;
       if(!['2024-11-05','2025-03-26','2025-06-18'].includes(version)) throw new Error('Unsupported MCP protocol version.');
       client.notify('notifications/initialized',{});

@@ -14,7 +14,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   {
     id: 'fix-bug',
     label: 'Fix a bug',
-    description: 'Describe the bug and NUVRO AI will locate and fix it',
+    description: 'Describe the bug and QUILLIX will locate and fix it',
     icon: <Bug size={18} />,
     prompt: 'Help me fix a bug. I will describe it in my next message.',
   },
@@ -76,7 +76,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projectMeta, onQuickAction
           >
             <Sparkles size={26} />
           </div>
-          <h1 className="text-3xl font-bold text-[var(--text)] mb-1.5">Build with NUVRO AI</h1>
+          <h1 className="text-3xl font-bold text-[var(--text)] mb-1.5">Build with QUILLIX</h1>
           <p className="text-[15px] text-[var(--text-muted)]">Your local AI coding agent.</p>
         </div>
 

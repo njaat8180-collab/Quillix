@@ -84,7 +84,9 @@ const realCredentials = [
   ['GitHub token', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789'],
   ['GitLab token', 'glpat-abcdefghijklmnopqrstuvu'],
   ['npm token', 'npm_abcdefghijklmnopqrstuvwxyz0123'],
-  ['Slack token', 'xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwx'],
+  // Build the synthetic token from fragments so GitHub secret scanning does not
+  // mistake this redaction test fixture for a credential in repository history.
+  ['Slack token', ['xoxb-', '123456789012-', '123456789012-', 'abcdefghijklmnopqrstuvwx'].join('')],
 ];
 
 for (const [label, secret] of realCredentials) {
