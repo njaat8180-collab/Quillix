@@ -44,7 +44,10 @@ const references = (value: string): string[] => [...new Set([
   ...[...value.matchAll(/\b(?:src|href)\s*=\s*['\"]([^'\"]+)['\"]/gi)].map(match => match[1]),
   ...[...value.matchAll(/@import\s+(?:url\(\s*)?['\"]?([^'\")\s;]+)['\"]?\s*\)?/gi)].map(match => match[1]),
   ...[...value.matchAll(/\burl\(\s*['\"]?([^'\")]+)['\"]?\s*\)/gi)].map(match => match[1]),
-].map(reference => reference.trim().replace(/[?#].*$/, '')))].slice(0, 32);
+].map(reference => reference.trim().replace(/[?#].*$/, '').trim())
+  // An empty reference (e.g. href="#") would match EVERY chunk through
+  // String.includes('') and corrupt relevance scoring.
+  .filter(Boolean))].slice(0, 32);
 
 /** Resolve the small, high-signal subset of local import references that can
  * be used to pull a companion file into the RAG context. This is deliberately
@@ -165,11 +168,14 @@ function walk(root: string, current = root, result: string[] = [], budget = { by
     if (result.length >= MAX_FILES || budget.bytes >= MAX_BYTES) break;
     const absolute = path.join(current, entry.name);
     const relative = path.relative(root, absolute).replace(/\\/g, '/');
-    if (entry.isDirectory()) {
+    // Follow symlinks (a source file linked into the workspace must be
+    // indexed) but never walk a symlinked directory out of the workspace.
+    const kind = entry.isDirectory() || entry.isFile() ? (entry.isDirectory() ? 'directory' : 'file') : safeEntryKind(root, absolute);
+    if (kind === 'directory') {
       if (!SKIP_DIRS.has(entry.name.toLowerCase()) && !isSecret(entry.name) && !EPHEMERAL_WORKSPACE_DIR.test(entry.name)) walk(root, absolute, result, budget);
       continue;
     }
-    if (!entry.isFile() || isSecret(relative) || !TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+    if (kind !== 'file' || isSecret(relative) || !TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
     try {
       const stat = fs.statSync(absolute);
       if (stat.size > 120_000 || budget.bytes + stat.size > MAX_BYTES) continue;
@@ -180,11 +186,36 @@ function walk(root: string, current = root, result: string[] = [], budget = { by
 }
 
 /** Normalize a caller path into the forward-slash workspace-relative key the
- * index uses. Absolute paths inside the root are accepted; anything else is
- * passed through so an unknown file invalidates nothing. */
-function ragKey(input: string): string {
-  const normalized = input.replace(/\\/g, '/').replace(/^\/+/, '');
-  return normalized.split('/').filter(Boolean).join('/');
+ * index uses. Absolute paths INSIDE the root are accepted (the docstring
+ * contract); anything else is passed through so an unknown file invalidates
+ * nothing. */
+function ragKey(root: string, input: string): string {
+  const slashed = String(input || '').replace(/\\/g, '/').trim();
+  if (!slashed) return '';
+  const relative = path.relative(root, path.resolve(root, slashed)).replace(/\\/g, '/');
+  if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) return relative;
+  return slashed.replace(/^\/+/, '').split('/').filter(Boolean).join('/');
+}
+
+/** Classify a directory entry, following symlinks but never leaving the root. */
+function safeEntryKind(root: string, absolute: string): 'directory' | 'file' | 'other' {
+  try {
+    // Compare against the RESOLVED root: the workspace root itself can be
+    // reached through a symlink (macOS /tmp -> /private/tmp, a Windows
+    // junction). Comparing the resolved entry against the lexical root would
+    // report every symlinked entry as an escape.
+    const realRoot = fs.realpathSync(root);
+    const real = fs.realpathSync(absolute);
+    const relative = path.relative(realRoot, real);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) return 'other'; // symlink escapes the workspace
+    // Private NUVRO AI state and Git internals are never indexed, even when a
+    // symlink or directory junction aliases them into the workspace.
+    if (relative.split(/[\\/]/).some(part => PROTECTED_SELECTED_DIRS.has(part.toLowerCase()))) return 'other';
+    const stat = fs.statSync(real);
+    if (stat.isDirectory()) return 'directory';
+    if (stat.isFile()) return 'file';
+    return 'other';
+  } catch { return 'other'; }
 }
 
 function loadIndex(file: string): RagIndex | undefined {
@@ -322,7 +353,7 @@ export class ProjectRag {
    * Returns the number of index entries dropped.
    */
   public invalidate(relativePath?: string): number {
-    const target = relativePath ? ragKey(relativePath) : null;
+    const target = relativePath ? ragKey(this.root, relativePath) : null;
     if (!this.index) {
       this.index = loadIndex(this.indexPath);
       if (!this.index) return 0;
@@ -373,7 +404,12 @@ export class ProjectRag {
       // so a relevant declaration near the end of a large file is not lost.
       for (const relative of new Set([...Object.keys(index.files), ...(currentFile ? [currentFile] : [])])) {
         if (!identifierPatterns.length && relative !== currentFile) continue;
-        if (activeBuffer === undefined && (indexedCounts.get(relative) || 0) === index.files[relative]?.chunkCount) continue;
+        // Incremental cache (M1.5): skip files whose indexed chunk count still
+        // matches. Only the ACTIVE FILE bypasses the skip — an unsaved buffer
+        // must re-derive its chunks. Previously a dirty buffer disabled the
+        // skip for every file and re-read the whole workspace on each
+        // retrieval.
+        if (relative !== currentFile && (indexedCounts.get(relative) || 0) === index.files[relative]?.chunkCount) continue;
         try {
           const content = relative === currentFile && activeBuffer !== undefined
             ? activeBuffer

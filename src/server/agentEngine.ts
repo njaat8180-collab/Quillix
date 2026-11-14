@@ -67,7 +67,7 @@ import { repairGreetingContract } from './greetingContract.js';
 import { repairSharedMoneyContract } from './sharedMoneyContract.js';
 import { repairMissingRelativeModule } from './moduleResolutionRepair.js';
 import { repairAxiosMaxBodyLengthContract, repairAxiosMaxBodyLengthPreflight } from './publicRepairContracts.js';
-import { parseReviewFindings } from './reviewAgent.js';
+import { parseReviewFindings, reviewResponseIsUnparseable } from './reviewAgent.js';
 import type { TavilyVerificationService } from './tavilyVerification.js';
 
 const CONTEXT_TRUST_BOUNDARY = [
@@ -2892,7 +2892,9 @@ ${directNewFile ? '' : `${projectContextForPrompt}${ragContextForPrompt}`}` } : 
               }
               emitActivity('thinking', findings.length
                 ? 'Reviewer findings recorded; no repair turn remains, so the task will not claim review clearance'
-                : 'Independent Reviewer reported no actionable blocker or major defect');
+                : reviewResponseIsUnparseable(reviewerText)
+                  ? 'Independent review produced no parseable findings; the deterministic verifier remains authoritative'
+                  : 'Independent Reviewer reported no actionable blocker or major defect');
               if (findings.length) finalText = `${finalText.trim()}\n\nIndependent review found unresolved issues:\n${findings.map(finding => `- ${finding.severity}: ${finding.file}: ${finding.issue}`).join('\n')}`.trim();
               if (findings.length) reviewerUnresolved = true;
             } else {

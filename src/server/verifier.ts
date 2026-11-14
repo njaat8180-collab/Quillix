@@ -61,58 +61,49 @@ export class WorkspaceVerifier {
       // comments, or consists solely of stub markers (pass / TODO /
       // "coming soon") is NOT a real implementation and must fail verification.
       const content = this.workspace.readFile(rel);
-      if (content.success && content.content !== undefined) {
-        const placeholderErr = checkPlaceholderCode(path.basename(rel), content.content);
-        if (placeholderErr) {
-          verified.push({ filePath: rel, check: 'placeholder-content', ok: false, error: placeholderErr });
-          continue;
-        }
+      if (!content.success || content.content === undefined) {
+        // An UNREADABLE file must fail: a protected/secret file or an I/O
+        // error can never be verified, and silently skipping the content
+        // checks would let an unverifiable file count toward success.
+        verified.push({ filePath: rel, check: 'content-read', ok: false,
+          error: content.error || 'The written file could not be read back for verification.' });
+        continue;
+      }
+      const placeholderErr = checkPlaceholderCode(path.basename(rel), content.content);
+      if (placeholderErr) {
+        verified.push({ filePath: rel, check: 'placeholder-content', ok: false, error: placeholderErr });
+        continue;
       }
 
       try {
         if (ext === '.json') {
-          const read = this.workspace.readFile(rel);
-          if (!read.success || read.content === undefined) {
-            verified.push({ filePath: rel, check: 'json-parse', ok: false, error: read.error || 'Unreadable' });
-          } else {
-            try {
-              JSON.parse(read.content);
-              verified.push({ filePath: rel, check: 'json-parse', ok: true });
-            } catch (err: any) {
-              verified.push({ filePath: rel, check: 'json-parse', ok: false, error: `Invalid JSON: ${err.message}` });
-            }
+          try {
+            JSON.parse(content.content);
+            verified.push({ filePath: rel, check: 'json-parse', ok: true });
+          } catch (err: any) {
+            verified.push({ filePath: rel, check: 'json-parse', ok: false, error: `Invalid JSON: ${err.message}` });
           }
         } else if (['.js', '.mjs', '.cjs'].includes(ext)) {
-          const read = this.workspace.readFile(rel);
-          if (!read.success || read.content === undefined) {
-            verified.push({ filePath: rel, check: 'js-syntax', ok: false, error: read.error || 'Unreadable' });
-          } else {
-            try {
-              const { transform } = await import('esbuild');
-              await transform(read.content, { loader: 'js', sourcefile: rel, format: 'cjs' });
-              verified.push({ filePath: rel, check: 'js-syntax', ok: true });
-            } catch (err: any) {
-              verified.push({ filePath: rel, check: 'js-syntax', ok: false, error: `JavaScript syntax check failed: ${String(err?.message || err).slice(0, 800)}` });
-            }
+          try {
+            const { transform } = await import('esbuild');
+            await transform(content.content, { loader: 'js', sourcefile: rel, format: 'cjs' });
+            verified.push({ filePath: rel, check: 'js-syntax', ok: true });
+          } catch (err: any) {
+            verified.push({ filePath: rel, check: 'js-syntax', ok: false, error: `JavaScript syntax check failed: ${String(err?.message || err).slice(0, 800)}` });
           }
         } else if (['.ts', '.tsx', '.jsx'].includes(ext)) {
           // Transpilation checks syntax, not project-wide types or runtime.
-          const read = this.workspace.readFile(rel);
-          if (!read.success || read.content === undefined) {
-            verified.push({ filePath: rel, check: 'ts-syntax', ok: false, error: read.error || 'Unreadable' });
-          } else {
-            try {
-              // TypeScript 7 no longer guarantees the legacy transpileModule
-              // compiler API. esbuild is already a mandatory NUVRO AI runtime
-              // dependency, and checks TS/TSX/JSX syntax without execution.
-              const { transform } = await import('esbuild');
-              const loader = ext === '.tsx' ? 'tsx' : ext === '.jsx' ? 'jsx' : 'ts';
-              await transform(read.content, { loader, sourcefile: rel, format: 'esm', jsx: 'automatic' });
-              verified.push({ filePath: rel, check: 'ts-syntax', ok: true });
-            } catch (err: any) {
-              const detail = typeof err?.message === 'string' ? err.message.slice(0, 300) : 'Syntax checking unavailable';
-              verified.push({ filePath: rel, check: 'ts-syntax', ok: false, error: `TypeScript/JSX syntax check failed: ${detail}` });
-            }
+          try {
+            // TypeScript 7 no longer guarantees the legacy transpileModule
+            // compiler API. esbuild is already a mandatory NUVRO AI runtime
+            // dependency, and checks TS/TSX/JSX syntax without execution.
+            const { transform } = await import('esbuild');
+            const loader = ext === '.tsx' ? 'tsx' : ext === '.jsx' ? 'jsx' : 'ts';
+            await transform(content.content, { loader, sourcefile: rel, format: 'esm', jsx: 'automatic' });
+            verified.push({ filePath: rel, check: 'ts-syntax', ok: true });
+          } catch (err: any) {
+            const detail = typeof err?.message === 'string' ? err.message.slice(0, 300) : 'Syntax checking unavailable';
+            verified.push({ filePath: rel, check: 'ts-syntax', ok: false, error: `TypeScript/JSX syntax check failed: ${detail}` });
           }
         } else if (ext === '.py') {
           const py = await this.detectPython();
@@ -138,38 +129,38 @@ export class WorkspaceVerifier {
             });
           }
         } else if (ext === '.html' || ext === '.htm') {
-          const read = this.workspace.readFile(rel);
-          if (read.success && read.content !== undefined) {
-            const htmlErr = checkHtml(read.content);
-            verified.push({
-              filePath: rel,
-              check: 'html-balance',
-              ok: !htmlErr,
-              error: htmlErr || undefined,
-            });
-            // Syntax-valid server code is NOT automatically browser-compatible.
-            // Inspect scripts linked by this HTML, without executing them.
-            for (const issue of inspectBrowserScripts(rel, read.content, scriptPath => {
-              const safe = this.workspace.resolveSafePath(scriptPath);
-              if (!safe.safe) return undefined;
-              const source = this.workspace.readFile(scriptPath);
-              return source.success ? source.content : undefined;
-            })) {
-              verified.push({ ...issue, ok: false });
-            }
-            for (const issue of inspectBrowserAssets(rel, read.content, assetPath => {
-              const safe = this.workspace.resolveSafePath(assetPath);
-              if (!safe.safe) return undefined;
-              const source = this.workspace.readFile(assetPath);
-              return source.success ? source.content : undefined;
-            })) {
-              verified.push({ ...issue, ok: false });
-            }
+          const htmlErr = checkHtml(content.content);
+          verified.push({
+            filePath: rel,
+            check: 'html-balance',
+            ok: !htmlErr,
+            error: htmlErr || undefined,
+          });
+          // Syntax-valid server code is NOT automatically browser-compatible.
+          // Inspect scripts linked by this HTML, without executing them.
+          for (const issue of inspectBrowserScripts(rel, content.content, scriptPath => {
+            const safe = this.workspace.resolveSafePath(scriptPath);
+            if (!safe.safe) return undefined;
+            const source = this.workspace.readFile(scriptPath);
+            return source.success ? source.content : undefined;
+          })) {
+            verified.push({ ...issue, ok: false });
+          }
+          for (const issue of inspectBrowserAssets(rel, content.content, assetPath => {
+            const safe = this.workspace.resolveSafePath(assetPath);
+            if (!safe.safe) return undefined;
+            const source = this.workspace.readFile(assetPath);
+            return source.success ? source.content : undefined;
+          })) {
+            verified.push({ ...issue, ok: false });
           }
         }
         // CSS, Markdown, config files: existence check already covers them.
       } catch (err: any) {
-        verified.push({ filePath: rel, check: ext, ok: false, error: err.message });
+        // Preserve the real failure text: a non-Error throw would otherwise
+        // report `error: undefined` on a failed check.
+        verified.push({ filePath: rel, check: ext, ok: false,
+          error: String((err as any)?.message || err || 'verification failed').slice(0, 800) });
       }
     }
 
@@ -196,32 +187,33 @@ export class WorkspaceVerifier {
     }
     const failures = verified.filter((v) => !v.ok);
     if (relativePaths.length === 0) {
-      failures.push({
+      const noFiles = {
         filePath: '',
         check: 'verification-input',
         ok: false,
         error: 'No files were produced for verification.',
-      });
+      };
+      verified.push(noFiles);
+      failures.push(noFiles);
     }
     return { verified, allOk: failures.length === 0, failures };
   }
 
+  /** Resolved Python interpreter, memoized so N .py files cost one probe. */
+  private pythonRuntime: string | null | undefined;
+
   private async detectPython(): Promise<string | null> {
+    if (this.pythonRuntime) return this.pythonRuntime;
     for (const cmd of ['python3', 'python']) {
-      const res = await this.terminal.executeCommand(`${cmd} --version`, this.workspace.getRoot(), undefined, 10000, 'agent');
-      if (res.exitCode === 0 && /python/i.test(res.stdout + res.stderr)) return cmd;
+      try {
+        const res = await this.terminal.executeCommand(`${cmd} --version`, this.workspace.getRoot(), undefined, 10000, 'agent');
+        if (res.exitCode === 0 && /python/i.test(res.stdout + res.stderr)) {
+          this.pythonRuntime = cmd;
+          return cmd;
+        }
+      } catch { /* try the next interpreter candidate */ }
     }
     return null;
-  }
-
-  private async runCheck(command: string, checkName: string) {
-    const res = await this.terminal.executeCommand(command, this.workspace.getRoot(), undefined, 30000, 'agent');
-    return (filePath: string): FileVerification => ({
-      filePath,
-      check: checkName,
-      ok: res.exitCode === 0,
-      error: res.exitCode === 0 ? undefined : (res.stderr || res.stdout || `Exit code ${res.exitCode}`).slice(0, 800),
-    });
   }
 }
 
@@ -242,13 +234,17 @@ function checkPlaceholderCode(fileName: string, content: string): string | undef
   }
 
   // Strip comments so only executable statements remain.
+  // CSS has NO line comments: `#id { … }` is a selector, not a comment, so a
+  // stylesheet built entirely from id rules would otherwise be misread as a
+  // comments-only placeholder.
+  const hashIsComment = ext !== '.css' && ext !== '.scss' && ext !== '.less';
   let code = content
     .replace(/\/\*[\s\S]*?\*\//g, '')      // /* */ block comments (JS/TS/CSS)
     .replace(/<!--[\s\S]*?-->/g, '')        // <!-- --> HTML comments
     .split('\n')
     .filter((line) => {
       const t = line.trim();
-      return t !== '' && !t.startsWith('#') && !t.startsWith('//');
+      return t !== '' && !t.startsWith('//') && !(hashIsComment && t.startsWith('#'));
     })
     .join('\n')
     .trim();
@@ -264,11 +260,19 @@ function checkPlaceholderCode(fileName: string, content: string): string | undef
   // Stub detection on the whitespace-collapsed code so indentation never hides
   // a placeholder ("def run():\n    pass\n" collapses to "defrun():pass").
   const compact = code.replace(/\s+/g, '');
+  // NOTE: `compact` has ALL whitespace removed, so these patterns must not
+  // require any whitespace between tokens.
   if (
-    /^(?:pass|\.\.\.|TODO|FIXME|NotImplemented(?:Error)?|raiseNotImplementedError)$/.test(compact) ||
-    /^(?:class\w+:(?:pass|\.\.\.))?def\w*\([^)]*\):(?:pass|\.\.\.|raiseNotImplementedError)$/.test(compact) ||
-    /^(?:export)?(?:default)?function\w*\([^)]*\)\{\}$/.test(compact) ||
-    /^(?:export)?default\{\}$/.test(compact)
+    /^(?:pass|\.\.\.|TODO|FIXME|NotImplemented(?:Error)?|raiseNotImplementedError\(\)?);?$/.test(compact) ||
+    // A function (sync or async) whose entire body is a stub.
+    /^(?:export)?(?:default)?(?:async)?function\w*\([^)]*\)\{\};?$/.test(compact) ||
+    /^(?:export)?(?:const|let|var)\w+=(?:async)?\([^)]*\)=>\{\};?$/.test(compact) ||
+    /^(?:export)?(?:const|let|var)\w+=(?:async)?\w+=>\{\};?$/.test(compact) ||
+    // A class (or plain function) whose every method body is a stub.
+    /^(?:export)?(?:default)?class\w*(?:extends[\w.]+)?\{(?:\w+\([^)]*\)\{\})+\};?$/.test(compact) ||
+    /^(?:export)?(?:default)?class\w*:(?:def\w*\([^)]*\):(?:pass|\.\.\.|raiseNotImplementedError\(\)?))+$/.test(compact) ||
+    /^(?:export)?(?:default)?def\w*\([^)]*\):(?:pass|\.\.\.|raiseNotImplementedError\(\)?);?$/.test(compact) ||
+    /^(?:export)?default\{\};?$/.test(compact)
   ) {
     return 'Code file contains only a stub (pass / TODO / empty function) — no implementation.';
   }
@@ -295,6 +299,19 @@ function checkHtml(html: string): string | undefined {
   // inside JavaScript; feeding those bytes to the structural tag stack
   // creates a false unclosed-tag failure and sends the agent into a useless
   // repair loop. Preserve the wrapper tags while excluding their contents.
+  // An UNCLOSED script/style would otherwise swallow the rest of the
+  // document and surface as a misleading "Tag <x> is never closed", so the
+  // real defect is reported by name first.
+  const scriptOpens = (html.match(/<script\b[^>]*>/gi) || []).length;
+  const scriptCloses = (html.match(/<\/script\s*>/gi) || []).length;
+  if (scriptOpens !== scriptCloses) {
+    return `Tag <script> is never closed (${scriptOpens} opening tag(s) vs ${scriptCloses} closing tag(s)).`;
+  }
+  const styleOpens = (html.match(/<style\b[^>]*>/gi) || []).length;
+  const styleCloses = (html.match(/<\/style\s*>/gi) || []).length;
+  if (styleOpens !== styleCloses) {
+    return `Tag <style> is never closed (${styleOpens} opening tag(s) vs ${styleCloses} closing tag(s)).`;
+  }
   const source = html
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/(<script\b[^>]*>)[\s\S]*?(<\/script\s*>)/gi, '$1$2')
