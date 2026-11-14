@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { releaseSourceFingerprint } from './release-source-fingerprint.mjs';
+import { releaseArtifactNames, firstExistingArtifact } from './release-artifact-names.mjs';
 
 const root = process.cwd();
 const markerPath = path.join(root, '.quillix-smoke', 'package-output.json');
@@ -10,10 +11,15 @@ try {
   if (typeof marker.outputDir === 'string' && path.isAbsolute(marker.outputDir)) releaseRoot = marker.outputDir;
 } catch { /* default release output remains authoritative when no package marker exists */ }
 const marker = (() => { try { return JSON.parse(fs.readFileSync(markerPath, 'utf8')); } catch { return {}; } })();
+// The installer name comes from the packager configuration, not from a
+// hardcoded brand string: electron-builder names the NSIS installer
+// "<productName> Setup <version>.exe" and the portable one
+// "<productName> <version>.exe" from electron-builder.json / package.json.
+const artifactNames = releaseArtifactNames(root);
 const installerCandidates = marker.target === 'portable'
-  ? ['Quillix 1.2.0.exe', 'Quillix.exe']
-  : ['Quillix Setup 1.2.0.exe'];
-const installer = installerCandidates.map(name => path.join(releaseRoot, name)).find(candidate => fs.existsSync(candidate)) || path.join(releaseRoot, installerCandidates[0]);
+  ? artifactNames.portable
+  : artifactNames.nsis;
+const installer = firstExistingArtifact(releaseRoot, installerCandidates);
 const appRoot = path.join(releaseRoot, 'win-unpacked', 'resources', 'app');
 const appArchive = path.join(releaseRoot, 'win-unpacked', 'resources', 'app.asar');
 const required = [

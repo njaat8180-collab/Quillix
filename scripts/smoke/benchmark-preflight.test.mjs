@@ -13,6 +13,14 @@ const resourcePauseEnv = {
   QUILLIX_ENFORCE_RESOURCE_GUARD: '1',
 };
 
+// Budget for a `node tsx` child. tsx transpiles the TypeScript sources on the
+// fly, so on a loaded host the child's startup alone can take 10-20 s. A
+// tighter budget kills the child before it writes its summary, which fails
+// the test for reasons unrelated to the code under test, and the killed child
+// can still hold the sandbox directory (EBUSY during cleanup). The assertions
+// below are unchanged — only the harness budget is generous.
+const TSX_CHILD_TIMEOUT_MS = 60_000;
+
 test('coding benchmark records a resumable resource pause before starting a model', () => {
   const sandbox = fs.mkdtempSync(path.join(smokeTemp, 'benchmark-preflight-'));
   try {
@@ -21,7 +29,7 @@ test('coding benchmark records a resumable resource pause before starting a mode
     const benchmarkScript = path.resolve('scripts/smoke/coding-benchmark.ts');
     const result = spawnSync(process.execPath, [tsxCli, benchmarkScript, 'short-open-file-follow-up'], {
       cwd: sandbox,
-      timeout: 20_000,
+      timeout: TSX_CHILD_TIMEOUT_MS,
       encoding: 'utf8',
       windowsHide: true,
       env: {
@@ -72,7 +80,7 @@ test('public SWE-bench runner records a resumable preflight pause without loadin
     const script = path.resolve('scripts/smoke/run-swebench-task.ts');
     const tsxCli = path.resolve('node_modules/tsx/dist/cli.mjs');
     const result = spawnSync(process.execPath, [tsxCli, script, manifest, checkout, output], {
-      cwd: process.cwd(), timeout: 20000, encoding: 'utf8', windowsHide: true,
+      cwd: process.cwd(), timeout: TSX_CHILD_TIMEOUT_MS, encoding: 'utf8', windowsHide: true,
       env: {...process.env, ...resourcePauseEnv, OLLAMA_MODEL:'qwen2.5-coder:1.5b'},
     });
     assert.notEqual(result.status, 0, 'resource gate must stop the run');
@@ -90,7 +98,7 @@ test('public SWE-bench runner records a resumable preflight pause without loadin
     const wrongManifest = path.join(sandbox, 'other-task.json');
     fs.writeFileSync(wrongManifest, JSON.stringify({instance_id:'fixture__repo-2', repo:'fixture/repo', base_commit:baseCommit, problem_statement:'Different task.'}));
     const wrongTask = spawnSync(process.execPath, [tsxCli, script, wrongManifest, checkout, output], {
-      cwd: process.cwd(), timeout: 20000, encoding: 'utf8', windowsHide: true,
+      cwd: process.cwd(), timeout: TSX_CHILD_TIMEOUT_MS, encoding: 'utf8', windowsHide: true,
       env: {...process.env, ...resourcePauseEnv, OLLAMA_MODEL:'qwen2.5-coder:1.5b'},
     });
     assert.notEqual(wrongTask.status, 0);

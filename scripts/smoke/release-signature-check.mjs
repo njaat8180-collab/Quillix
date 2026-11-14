@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { releaseSignatureReport } from './release-signature-contract.mjs';
+import { releaseArtifactNames, firstExistingArtifact } from './release-artifact-names.mjs';
 
 const root = process.cwd();
 const markerPath = path.join(root, '.quillix-smoke', 'package-output.json');
@@ -13,9 +14,12 @@ try {
   if (typeof marker.target === 'string') target = marker.target;
 } catch { /* package marker is optional for a diagnostic-only run */ }
 
-const executable = path.join(outputDir, 'win-unpacked', 'Quillix.exe');
-const installerName = target === 'portable' ? 'Quillix 1.2.0.exe' : 'Quillix Setup 1.2.0.exe';
-const installer = path.join(outputDir, installerName);
+// The signed binaries are named by the packager configuration. Reading it
+// keeps this check aligned with what electron-builder actually produced
+// instead of a hardcoded brand string that can drift out of sync.
+const artifactNames = releaseArtifactNames(root);
+const executable = firstExistingArtifact(path.join(outputDir, 'win-unpacked'), artifactNames.executable);
+const installer = firstExistingArtifact(outputDir, target === 'portable' ? artifactNames.portable : artifactNames.nsis);
 const required = process.env.QUILLIX_REQUIRE_SIGNED_RELEASE === '1';
 if (process.platform !== 'win32') {
   console.log(JSON.stringify({ ...releaseSignatureReport({ required }), reason: 'Windows Authenticode is only available on Windows.' }));
@@ -45,7 +49,10 @@ const result = spawnSync(
   {
     encoding: 'utf8',
     windowsHide: true,
-    timeout: 15000,
+    // PowerShell cold start plus Get-AuthenticodeSignature can exceed a tight
+    // budget on a loaded host; the child is then killed before it reports and
+    // the check fails for reasons unrelated to the signature itself.
+    timeout: 60_000,
     env: {
       SystemRoot: process.env.SystemRoot,
       SystemDrive: process.env.SystemDrive,

@@ -38,6 +38,16 @@ FAKE_HOME="$WORK_DIR/home"
 SERVER_BUNDLE="$REPO_ROOT/.e2e/server.cjs"
 PASS=0
 FAIL=0
+CURRENT_STREAM=""
+# Per-scenario budget for one agent run. The engine's resource guard waits up
+# to 60 s for CPU headroom before it starts a model request, so the harness
+# budget must leave room for a guard wait plus the scenario itself. It is
+# configurable and reported when it truncates a run.
+AGENT_RUN_TIMEOUT_SECONDS="${QUILLIX_E2E_RUN_TIMEOUT_SECONDS:-300}"
+# How long the harness waits for the host to have CPU headroom before it
+# starts, and how much headroom it asks for.
+CAPACITY_WAIT_SECONDS="${QUILLIX_E2E_CAPACITY_WAIT_SECONDS:-300}"
+CAPACITY_THRESHOLD="${QUILLIX_E2E_CAPACITY_THRESHOLD:-80}"
 
 # Git Bash on Windows exposes /tmp as a POSIX path, but Node resolves an
 # absolute /tmp path as C:\\tmp. Keep POSIX paths for shell filesystem checks
@@ -75,8 +85,25 @@ cleanup() {
 trap cleanup EXIT
 
 say()  { printf '%s\n' "$*"; }
+# Starts a scenario: the stream of the previous scenario is cleared so a
+# failure that is not tied to an agent run (for example a task-store check)
+# is never classified against an unrelated stream.
+scenario() { CURRENT_STREAM=""; say ""; say "$*"; }
 pass() { PASS=$((PASS + 1)); say "PASS — $*"; }
-fail() { FAIL=$((FAIL + 1)); say "FAIL — $*"; }
+# Each failure is recorded with the stream file of the scenario that produced
+# it, so the final summary can tell a product defect apart from a run that the
+# agent's own resource guard aborted because the machine was saturated.
+fail() {
+  FAIL=$((FAIL + 1))
+  say "FAIL — $*"
+  local stream_name=""
+  case "${CURRENT_STREAM:-}" in
+    "$WORK_DIR"/*) stream_name="${CURRENT_STREAM#"$WORK_DIR"/}" ;;
+    "") stream_name="" ;;
+    *) stream_name="${CURRENT_STREAM##*/}" ;;
+  esac
+  printf '%s|%s\n' "$stream_name" "$*" >> "$WORK_DIR/failures.txt"
+}
 
 # Locate esbuild (node_modules or global npx fallback)
 if [ -x "node_modules/.bin/esbuild" ]; then
@@ -91,6 +118,25 @@ if [ -z "$ESBUILD" ]; then
 fi
 
 mkdir -p "$WS" "$FAKE_HOME/.quillix" "$REPO_ROOT/.e2e"
+
+# =============================================================================
+# Host capacity pre-flight.
+#
+# The agent's resource guard (src/server/resourceGuard.ts) pauses model
+# requests while the machine is saturated and reports a resumable error rather
+# than pretending the request succeeded. That is the correct product
+# behaviour and the guard is NOT relaxed here. Without this pre-flight an E2E
+# run that happens to start on a busy host is aborted mid-run for purely
+# environmental reasons and the harness reports that as a product failure.
+# Acquiring capacity up front keeps the harness verdict about the product.
+# =============================================================================
+say "== Checking host capacity (the agent's resource guard pauses model requests on a saturated machine) =="
+if ! node scripts/e2e/host-capacity.mjs --wait --threshold "$CAPACITY_THRESHOLD" --max-seconds "$CAPACITY_WAIT_SECONDS"; then
+  say "Host has no CPU headroom after ${CAPACITY_WAIT_SECONDS}s — the agent's resource guard would pause model requests."
+  say "EXIT 75: environment blocked (host too busy), not a product failure."
+  exit 75
+fi
+
 cat > "$FAKE_HOME/.quillix/settings.json" <<EOF
 {
   "model": "qwen2.5-coder:3b",
@@ -122,10 +168,24 @@ NODE_ENV=production PORT="$PORT" QUILLIX_SETTINGS_PATH="$SETTINGS_NATIVE" \
   node --require "$REPO_ROOT/scripts/e2e/fetch-polyfill.cjs" "$SERVER_BUNDLE" \
   > "$WORK_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 2.5
 
-if ! curl -s "http://127.0.0.1:$PORT/api/health" > /dev/null 2>&1; then
-  say "Server did not start — log:"; cat "$WORK_DIR/server.log"; exit 1
+# The bundled server needs a moment to boot. Poll the health endpoint inside a
+# bounded window instead of sleeping a fixed 2.5 s: on a loaded host the fixed
+# sleep expires before the server is listening and the run fails for reasons
+# unrelated to the agent. The health assertion itself is unchanged - only the
+# wait became bounded and retrying.
+SERVER_READY=0
+SERVER_WAIT_SECONDS=90
+for ((i = 0; i < SERVER_WAIT_SECONDS; i += 1)); do
+  if curl -s --max-time 2 "http://127.0.0.1:$PORT/api/health" > /dev/null 2>&1; then
+    SERVER_READY=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$SERVER_READY" -ne 1 ]; then
+  say "Server did not start within ${SERVER_WAIT_SECONDS}s - log:"; cat "$WORK_DIR/server.log"; exit 1
 fi
 
 SET_ROOT_BODY="$(WS_NATIVE="$WS_NATIVE" node -e 'process.stdout.write(JSON.stringify({targetPath: process.env.WS_NATIVE}))')"
@@ -140,7 +200,8 @@ fi
 
 # Runs one agent scenario over the real SSE endpoint; stores the stream.
 run_agent() { # $1 = prompt, $2 = output file
-  curl -s -N --max-time 120 -X POST "http://127.0.0.1:$PORT/api/agent/run" \
+  CURRENT_STREAM="$2"
+  curl -s -N --max-time "$AGENT_RUN_TIMEOUT_SECONDS" -X POST "http://127.0.0.1:$PORT/api/agent/run" \
     -H 'Content-Type: application/json' \
     -d "$(node -e 'process.stdout.write(JSON.stringify({ userPrompt: process.argv[1], mode: "agent", conversationMode: "agent", conversationHistory: [] }))' "$1")" \
     > "$2"
@@ -149,8 +210,7 @@ run_agent() { # $1 = prompt, $2 = output file
 done_text() { grep '"event":"done"' "$1" | tail -1; }
 
 # =============================================================================
-say ""
-say "== S1: single file — \"Create a file named test.html containing a simple HTML page.\" =="
+scenario "== S1: single file — \"Create a file named test.html containing a simple HTML page.\" =="
 run_agent "Create a file named test.html containing a simple HTML page." "$WORK_DIR/s1.txt"
 
 if [ -f "$WS/test.html" ]; then
@@ -181,8 +241,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S2: project — \"Create a calculator project.\" =="
+scenario "== S2: project — \"Create a calculator project.\" =="
 run_agent "Create a calculator project." "$WORK_DIR/s2.txt"
 
 CALC="$WS/Calculator"
@@ -227,8 +286,7 @@ fi
 
 # Follow-up in the same project: prove that a second user request is treated
 # as a continuation/edit, not as a fresh chatbot answer or a new project.
-say ""
-say "== S2-follow-up: continue the existing Calculator project =="
+scenario "== S2-follow-up: continue the existing Calculator project =="
 S2_BEFORE=$(find "$WS" -maxdepth 1 -mindepth 1 -type d ! -name '.quillix' | sort)
 run_agent "Add a percentage button to the existing Calculator project and connect it in the current files." "$WORK_DIR/s2-follow-up.txt"
 S2_AFTER=$(find "$WS" -maxdepth 1 -mindepth 1 -type d ! -name '.quillix' | sort)
@@ -249,8 +307,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S3: test → fix → retest — \"Create a professional responsive To-Do List web application\" =="
+scenario "== S3: test → fix → retest — \"Create a professional responsive To-Do List web application\" =="
 run_agent "Create a professional responsive To-Do List web application" "$WORK_DIR/s3.txt"
 
 # .quillix is Quillix's own metadata directory, not the generated project.
@@ -287,8 +344,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S4: Python project + nudge + real run/fix/retest — \"Help me build a car game using Python\" =="
+scenario "== S4: Python project + nudge + real run/fix/retest — \"Help me build a car game using Python\" =="
 run_agent "Help me build a car game using Python" "$WORK_DIR/s4.txt"
 
 CAR="$WS/CarGame"
@@ -338,8 +394,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S5: Python calculator — \"Create a Python calculator.\" =="
+scenario "== S5: Python calculator — \"Create a Python calculator.\" =="
 S5_BEFORE=$(ls -A "$WS" 2>/dev/null)
 run_agent "Create a Python calculator." "$WORK_DIR/s5.txt"
 # The engine derives the folder from the prompt (stopword-filtered) and
@@ -382,8 +437,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S6: Node.js application — \"Create a Node.js application.\" =="
+scenario "== S6: Node.js application — \"Create a Node.js application.\" =="
 S6_BEFORE=$(ls -A "$WS" 2>/dev/null)
 run_agent "Create a Node.js application." "$WORK_DIR/s6.txt"
 NAPP=$(comm -13 <(echo "$S6_BEFORE" | sort) <(ls -A "$WS" | sort) | grep -v '^\.quillix$' | head -1)
@@ -418,8 +472,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S7: bug-fix — intentionally broken project, \"Fix this broken project.\" =="
+scenario "== S7: bug-fix — intentionally broken project, \"Fix this broken project.\" =="
 mkdir -p "$WS/BrokenApp"
 cat > "$WS/BrokenApp/main.py" <<'BROKEN'
 # BrokenApp - intentionally broken (syntax errors).
@@ -464,8 +517,7 @@ else
 fi
 
 # =============================================================================
-say ""
-say "== S8: persistent task state + resume records (§21) =="
+scenario "== S8: persistent task state + resume records (§21) =="
 TASKS=$(curl -s "http://127.0.0.1:$PORT/api/tasks")
 for REQ in 'Python calculator' 'Node.js application' 'BrokenApp'; do
   if echo "$TASKS" | grep -qF "$REQ"; then
@@ -550,7 +602,23 @@ say "AGENT E2E RESULT: $PASS passed, $FAIL failed"
 if [ "$FAIL" -eq 0 ]; then
   say "ALL AGENT E2E CHECKS PASSED"
   exit 0
-else
-  say "FAILURES DETECTED — server log: $WORK_DIR/server.log"
-  exit 1
 fi
+
+# -----------------------------------------------------------------------------
+# Classify the failures.
+#
+# A scenario that the agent's own resource guard aborted because the machine
+# was saturated is an ENVIRONMENT block, not a product defect: the engine
+# reported it honestly as a resumable error instead of claiming success. Only
+# when EVERY failure is explained that way is the run reported as blocked
+# (exit 75 — the repository's convention for resource-blocked work); otherwise
+# the run stays a genuine failure so a real defect can never hide behind a
+# busy machine.
+# -----------------------------------------------------------------------------
+bash scripts/e2e/classify-failures.sh "$WORK_DIR"
+CLASSIFY_STATUS=$?
+if [ "$CLASSIFY_STATUS" -eq 75 ]; then
+  exit 75
+fi
+say "FAILURES DETECTED — server log: $WORK_DIR/server.log"
+exit 1

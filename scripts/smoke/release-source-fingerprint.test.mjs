@@ -37,7 +37,10 @@ test('release artifact checker rejects missing and stale fingerprints before exa
     fs.writeFileSync(markerPath, JSON.stringify(marker));
     const checkScript = path.resolve('scripts/smoke/release-artifact-check.mjs');
     const runCheck = () => spawnSync(process.execPath, [checkScript], {
-      cwd: root, timeout: 10_000, encoding: 'utf8', windowsHide: true,
+      // Generous budget: the check re-reads the release tree and computes a
+      // source fingerprint. A tight budget kills it on a loaded host and
+      // fails the test for reasons unrelated to the code under test.
+      cwd: root, timeout: 30_000, encoding: 'utf8', windowsHide: true,
     });
 
     const stale = runCheck();
