@@ -282,6 +282,128 @@ ACCEPTANCE FAILED: test:website-behavior
 acceptance gate is self-provisioning and does not depend on a gitignored folder
 that a fresh worktree never has.
 
+### 6.2 `test:benchmark-artifact` needs a live benchmark artifact it never creates
+
+After the fixture above was seeded, the acceptance chain advanced and stopped at
+the **next** artifact gate:
+
+```
+Error: Benchmark matrix missing:
+  ...\.quillix-smoke\ollama-model-matrix.json
+    at scripts/smoke/benchmark-artifact-contract.mjs:5:33
+ACCEPTANCE FAILED: test:benchmark-artifact
+```
+
+* `scripts/smoke/benchmark-artifact-contract.mjs:4-5` reads
+  `.quillix-smoke/ollama-model-matrix.json` and throws when it is missing.
+* The file is **gitignored local state** (`.gitignore:22`) and is produced by a
+  **separate operator step**, `npm run benchmark:matrix`
+  (`scripts/smoke/ollama-model-matrix.ts:41` spawns `coding-benchmark.ts
+  --acceptance` per model). The acceptance chain never generates it.
+* The matrix is **63 real local Ollama runs** (3 models × 7 cases × 3 repeats);
+  the models are installed on this host and `http://127.0.0.1:11434/api/tags`
+  answers HTTP 200.
+
+**The copy shortcut was deliberately refused.** The main checkout has such an
+artifact, produced on this same host on 2026-11-14 07:34Z. Its
+`evaluatorContractFingerprint` (`cab2e73a…7dcb`) matches this branch, **but its
+`caseSetFingerprint` (`04701f4c…a9a9`) matches neither this branch
+(`9785d615…a3f`) nor the main checkout's current code (`6a4977c8…b09a`)** — the
+case-set fingerprint covers the case prompts/fixtures/checks **and**
+`scripts/smoke/website-continuation-browser.cjs`, which differs between the two
+checkouts. The measurement also ran the main checkout's `agentEngine.ts`, which
+differs from this branch's engine. Copying it would have produced a green gate
+backed by evidence of **different code** — a fake PASS. It was not done.
+
+**Real weakness in the gate (proposal, not applied — `scripts/**` is Cline-owned):**
+
+`benchmark-artifact-contract.mjs:11` validates both provenance fingerprints with
+`/^[a-f0-9]{64}$/i` — the **shape**, never the **value**. Line 20 only checks
+that each matrix row agrees with the report. A **stale** artifact therefore
+passes the contract as long as it is internally consistent; that is exactly how
+the artifact above would have passed.
+
+Proposed change (same approach as the round-3/4 name derivation, i.e. one
+shared derivation used by every gate):
+
+```js
+// scripts/smoke/benchmark-artifact-contract.mjs
+import { currentCaseSetFingerprint, currentEvaluatorContractFingerprint } from './benchmark-case-fingerprint.mjs';
+// …
+if (report.evaluatorContractFingerprint !== currentEvaluatorContractFingerprint(root))
+  throw new Error('Benchmark matrix evaluator contract is stale: rebuild it with `npm run benchmark:matrix`.');
+if (report.caseSetFingerprint !== currentCaseSetFingerprint(root))
+  throw new Error('Benchmark matrix case set is stale: rebuild it with `npm run benchmark:matrix`.');
+```
+
+where the helper is the same `sha256` construction the producer already uses
+(`scripts/smoke/coding-benchmark.ts:182-190`): `sha256(scripts/smoke/benchmark-quality.ts)`
+for the evaluator contract, and `sha256({protocol, evaluatorContractFingerprint,
+cases:[…]})` for the case set. The helper should live next to the producer and
+be imported by both, so the check cannot drift from the generator.
+
+**Ask:** (a) add the fingerprint-value check, and (b) decide whether the
+acceptance chain should **generate** the matrix (expensive: 63 real runs) or
+**skip the suite explicitly** when the artifact is absent, so the chain reports
+"skipped: no local benchmark artifact" instead of a hard failure that hides
+every suite behind it.
+
+### 6.3 `test:packaged-static` can never pass on this branch (ready-to-apply patch)
+
+`npm run test:packaged-static` fails with:
+
+```
+AssertionError [ERR_ASSERTION]: unpacked Quillix executable is missing
+  at scripts/smoke/packaged-static-contract.mjs:22:8
+```
+
+This is **not** caused by the forbidden rebuild and it is **not** fixable by
+packaging. `electron-builder.json` declares `"productName": "NUVRO AI"`, so the
+packager produces `NUVRO AI Setup 1.2.0.exe` and `win-unpacked/NUVRO AI.exe` —
+exactly what is present in `release/windows/` here. The gate nevertheless
+hardcodes the old names:
+
+```js
+// scripts/smoke/packaged-static-contract.mjs:20-22  (current, broken)
+const installerName = target === 'portable' ? 'Quillix 1.2.0.exe' : 'Quillix Setup 1.2.0.exe';
+const installer = path.join(release, installerName);
+assert.ok(fs.existsSync(path.join(unpacked, 'Quillix.exe')), 'unpacked Quillix executable is missing');
+```
+
+`scripts/smoke/release-artifact-check.mjs` and `scripts/smoke/release-signature-check.mjs`
+were already migrated to the shared derivation in `cdc0772`; this third gate was
+**left behind** (`git log -- scripts/smoke/packaged-static-contract.mjs` → last
+touched at the baseline commit `09b7a8c`).
+
+Proposed patch:
+
+```diff
+--- a/scripts/smoke/packaged-static-contract.mjs
++++ b/scripts/smoke/packaged-static-contract.mjs
+@@
+ import { listPackage, extractFile } from '@electron/asar';
++import { releaseArtifactNames, firstExistingArtifact } from './release-artifact-names.mjs';
+@@
+-const installerName = target === 'portable' ? 'Quillix 1.2.0.exe' : 'Quillix Setup 1.2.0.exe';
+-const installer = path.join(release, installerName);
+-assert.ok(fs.existsSync(path.join(unpacked, 'Quillix.exe')), 'unpacked Quillix executable is missing');
++const artifactNames = releaseArtifactNames(project);
++const installerName = target === 'portable' ? artifactNames.portable[0] : artifactNames.nsis[0];
++const installer = firstExistingArtifact(release, target === 'portable' ? artifactNames.portable : artifactNames.nsis);
++const executable = firstExistingArtifact(unpacked, artifactNames.executable);
++assert.ok(fs.existsSync(executable), 'unpacked Quillix executable is missing');
+```
+
+`releaseArtifactNames()` already returns the legacy `Quillix …` names as
+fallbacks, so a pre-rename artifact still verifies and a post-rename artifact
+verifies too. On this branch it yields
+`nsis: ["NUVRO AI Setup 1.2.0.exe", "Quillix Setup 1.2.0.exe"]` and
+`executable: ["NUVRO AI.exe", "Quillix.exe"]`.
+
+**Ask:** apply the patch above (or merge it) so `test:packaged-static` is not
+permanently red and its failure message stops implying that packaging is
+broken.
+
 ---
 
 ## 7. Requested Cline actions (in priority order)
@@ -292,14 +414,18 @@ that a fresh worktree never has.
    item in this package that is genuinely missing from the code.
 3. Merge `b65bbf9` (M2.5 external-write catch-up) into the release branch.
 4. Merge `6f7cbc9` (self-provisioning website-behavior fixture) — see section 6.1.
-5. Sync `.quillix/mission/TASKS.md` for `P3.1` and `P3.4` (sections 2 and 3).
-6. Apply `safeProviderError` to the remaining raw `e.message` sites in `src/server/**`
+5. Add the **fingerprint-value check** to `benchmark-artifact-contract.mjs` so a
+   stale benchmark artifact cannot pass — see section 6.2 (proposal included).
+6. Apply the **`test:packaged-static` name-derivation patch** so that gate stops
+   being permanently red on this branch — see section 6.3 (diff included).
+7. Sync `.quillix/mission/TASKS.md` for `P3.1` and `P3.4` (sections 2 and 3).
+8. Apply `safeProviderError` to the remaining raw `e.message` sites in `src/server/**`
    (section 4, item 1).
-7. **P3.10 / M8.9** — the four named modules are still below 80 % coverage
+9. **P3.10 / M8.9** — the four named modules are still below 80 % coverage
    (`agentEngine` 77.85 % stmts / 78.84 % lines, `universal` 74.67 / 82.98,
    `indexer` 72.82 / 75.90, `workspace` 70.76 / 77.61). Their uncovered regions
    can be covered from `verification/**` without editing a single Cline file —
    that work is mapped and started, and the mapping is in
-   `QUILLIX_FINAL_HARDENING_REPORT_2026-11-14.md` §6.3. Cline's call: should the
+   `QUILLIX_FINAL_HARDENING_REPORT_2026-11-14.md` §6.5. Cline's call: should the
    extra tests live in `verification/` (this agent's path) or in
    `src/server/__tests__/` (Cline's path)?

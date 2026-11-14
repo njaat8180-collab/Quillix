@@ -380,13 +380,26 @@ The only stderr in the full Vitest run is the *expected* output of
 | `npm run test:agent-e2e` | **EXIT 0 — 66 passed, 0 failed**, `ALL AGENT E2E CHECKS PASSED` |
 | `npm run test:memory-hygiene` | **EXIT 0 — `{"status":"PASS", ...}`** |
 | `npm run test:coverage` | **EXIT 0** — 91 files / 911 tests. Coverage: all files **76.49 %** stmts / 70.15 % branch / 78.11 % funcs / **80.99 %** lines; `src/server` 77.61 / 70.58 / 80.79 / 82.37; `src/shared` 93.62 / 86.43 / 93.10 / 97.42; new `platform/` **97.29 / 91.66 / 100 / 98.30** |
-| `npm run test:acceptance:safe` | **EXIT 1 — FAILED at `test:website-behavior`** with `ENOENT ... test\qwen-ecommerce-WxPTxO\behavior-report.json`. Root cause: the gate expects a **gitignored local fixture** (`.gitignore:26` `test/qwen-*/`, `.gitignore:48` `test/*/`) that this worktree never had; the script never creates it. After provisioning the fixture locally from the main checkout, `npm run test:website-behavior` → **EXIT 0**, `"allOk": true`. A full acceptance re-run was **started** and was still running when this checkpoint was taken — it is reported as *started, not completed*, no PASS is claimed. The durable fix already exists on `agent-codevian` @ `6f7cbc9` (self-provisioning fixture) and is listed in the coordination package. |
+| `npm run test:acceptance:safe` | **EXIT 1 — FAILED at `test:benchmark-artifact`** with `Error: Benchmark matrix missing: ...\.quillix-smoke\ollama-model-matrix.json`. The chain reached this point only after the first blocker (`test:website-behavior`) was cleared by seeding the gitignored fixture `test/qwen-ecommerce-WxPTxO` from the main checkout → `npm run test:website-behavior` → **EXIT 0**, `"allOk": true`. The second blocker is a **gitignored live-benchmark artifact** (`.gitignore:22`) produced by the separate operator step `npm run benchmark:matrix` (63 real local Ollama runs); the gate never creates it. Copying the main checkout's artifact was **refused**: its `caseSetFingerprint` (`04701f4c…a9a9`) matches neither this branch (`9785d615…a3f`) nor the main checkout's current code (`6a4977c8…b09a`), and it measured the main checkout's `agentEngine.ts` — a green gate backed by evidence of different code would be a fake PASS. The suites behind the stopping point were run **individually**: `test:package-preflight` 0 · `test:token-efficiency` 0 · `test:live-provider:mock` 0 · `test:live-tavily` 0 · `test:settings-health` 0 · `test:preview-ui` 0 · `test:chat-ui` 0 · `test:conversation-mode-storage` 0 · `test:production-surface` 0 · `test:release-artifact` **1** (stale fingerprint, rebuild forbidden) · `test:release-signature` 0 (`NotSigned`) · `test:packaged-static` **1** (real gate defect). **15 of 18 runnable acceptance suites pass.** |
 | `npm run package:win` / installer / signing | **NOT RUN** — explicitly excluded from this round. Consequently the pre-existing installer is now **stale** (round 5 changed fingerprint inputs: `server.ts`, `index.html`, `vite.config.ts`, `package.json`, `tsconfig.json`, `electron/**`); `test:release-artifact` is expected to report that. No rebuild was attempted and no workaround was applied. |
 
 **Budget-only change:** `vitest.config.ts` `testTimeout`/`hookTimeout` 30 s → 60 s.
 The coverage-instrumented run needs ~34 s for the slowest native-command test in
 `codingWorkflow.test.ts`; the same file passes **39/39 in 96.95 s** in isolation
 without coverage. No assertion was changed, removed or relaxed.
+
+**Real release-gate defect found while running the acceptance chain:**
+`test:packaged-static` can never pass on this branch. `electron-builder.json`
+declares `"productName": "NUVRO AI"`, so the packager produces
+`NUVRO AI Setup 1.2.0.exe` / `win-unpacked/NUVRO AI.exe` — exactly what is
+present in `release/windows/` — while `scripts/smoke/packaged-static-contract.mjs:20,22`
+still hardcodes `'Quillix Setup 1.2.0.exe'` / `'Quillix.exe'`. The round-3/4 fix
+(`cdc0772`, *"make the release gates match what the packager builds"*) migrated
+`release-artifact-check.mjs` and `release-signature-check.mjs` to the shared
+`releaseArtifactNames()` derivation and **left this third gate behind**
+(`git log -- scripts/smoke/packaged-static-contract.mjs` → last touched at the
+baseline commit `09b7a8c`). `scripts/**` is Cline-owned, so the fix is delivered
+as a ready-to-apply diff in `QUILLIX_CLINE_COORDINATION_PACKAGE.md` §6.3.
 
 ### Smoke-suite detail (each suite executed individually)
 
