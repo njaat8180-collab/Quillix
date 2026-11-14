@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shutdownChildBounded, type ShutdownChild } from '../../electron/desktopShutdown.js';
+import { shutdownChildBounded, type ShutdownChild } from '../../../electron/desktopShutdown.js';
 
 /** A child that exits only after a given signal, or never. */
 function fakeChild(options: { exitsOn?: string; neverExits?: boolean } = {}) {
@@ -128,10 +128,11 @@ describe('bounded desktop shutdown (hardening)', () => {
       graceMs: 10,
       forceMs: 10,
       pollMs: 5,
-      onLog: (message) => messages.push(message),
+      onLog: (message: string) => messages.push(message),
     });
     expect(messages.join('\n')).toMatch(/graceful/i);
     expect(messages.join('\n')).toMatch(/SIGKILL/);
     expect(messages.join('\n')).toMatch(/force-exit/i);
   });
 });
+
