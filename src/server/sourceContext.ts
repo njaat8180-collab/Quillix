@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { WorkspaceManager } from './workspace.js';
 import { getBundledKnowledgeBase } from './knowledgeBase.js';
+import { isBackupTreeDirectory, isExcludedDiscoveryPath, isScratchSourceFile } from './workspaceExclusions.js';
 
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|[ch](?:pp)?|cs|php|rb|swift|kt|sql|vue|svelte|html?|css|scss|jsonc?|ya?ml|toml|md)$/i;
-const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'target', 'vendor', 'coverage', 'bin', 'obj', '.next', '.venv', 'venv', '__pycache__', '.quillix', '.quillix-smoke', '.qa-dist']);
+const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'target', 'vendor', 'coverage', 'bin', 'obj', '.next', '.venv', 'venv', '__pycache__', '.quillix', '.quillix-smoke', '.qa-dist', '_checkpoints', 'release', 'out', '.vite', '.cache', '.turbo', '.parcel-cache']);
 const STOP = new Set('the and with this that please file files project create update refactor fix explain code change implement function class export import from return const let var test tests'.split(' '));
 const posix = (file: string) => file.replace(/\\/g, '/').replace(/^\.\//, '');
 const terms = (value: string): string[] => [...new Set((value.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu) || []).filter(w => !STOP.has(w)))].slice(0, 24);
@@ -101,18 +102,26 @@ export class SourceContextRetriever {
       try {
         for (const entry of fs.readdirSync(safe.fullPath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
           if (++entriesSeen > 5000 || candidates.length >= 800) { report.limited = true; break; }
-          if (SKIP.has(entry.name) || entry.isSymbolicLink()) continue;
+          if (SKIP.has(entry.name) || isBackupTreeDirectory(entry.name) || entry.isSymbolicLink()) continue;
           const file = posix(path.posix.join(dirs[i], entry.name));
           if (entry.isDirectory()) {
             if (file.split('/').length < 10 && dirs.length < 300) dirs.push(file);
             else report.limited = true;
-          } else if (entry.isFile() && SOURCE.test(file) && !WorkspaceManager.isSecretPath(file)) candidates.push(file);
+          } else if (entry.isFile() && SOURCE.test(file) && !WorkspaceManager.isSecretPath(file) &&
+                     !isScratchSourceFile(file)) candidates.push(file);
         }
       } catch { /* unreadable folders are not evidence */ }
     }
     if (candidates.length >= 800 || entriesSeen >= 5000) report.limited = true;
     // Explicit paths are considered even when the bounded directory walk did not reach them.
-    for (const file of named) if (SOURCE.test(file) && !candidates.includes(file) && !WorkspaceManager.isSecretPath(file)) candidates.unshift(file);
+    // A named path is still rejected when it points into a backup tree or is a
+    // root-level scratch helper: naming a stale copy must not turn it into
+    // authoritative evidence.
+    for (const file of named) {
+      if (!SOURCE.test(file) || candidates.includes(file)) continue;
+      if (WorkspaceManager.isSecretPath(file) || isExcludedDiscoveryPath(file)) continue;
+      candidates.unshift(file);
+    }
     const pathScore = (file: string) => {
       const lower = file.toLowerCase();
       return (options.currentFile && lower === posix(options.currentFile).toLowerCase() ? 250 : 0) +
@@ -124,7 +133,7 @@ export class SourceContextRetriever {
     for (const file of candidates) {
       if (report.scannedFiles >= 160 || report.readBytes >= 2 * 1024 * 1024) { report.limited = true; break; }
       const safe = this.workspace.resolveSafePath(file);
-      if (!safe.safe || WorkspaceManager.isSecretPath(file)) { this.cache.delete(file); continue; }
+      if (!safe.safe || WorkspaceManager.isSecretPath(file) || isExcludedDiscoveryPath(file)) { this.cache.delete(file); continue; }
       try {
         const stat = fs.statSync(safe.fullPath);
         if (!stat.isFile() || stat.size > 128 * 1024 || fs.lstatSync(safe.fullPath).isSymbolicLink() ||
