@@ -26,6 +26,27 @@ test('removes only undersized NSIS installer and its regular blockmap after fall
   });
 });
 
+test('also cleans an undersized installer named after the real productName', async () => {
+  // electron-builder names the NSIS installer after the builder productName
+  // ("NUVRO AI Setup 1.2.0.exe"). The cleanup used to hardcode the old
+  // "Quillix Setup 1.2.0.exe" spelling and therefore never removed an
+  // incomplete installer produced by the current packager.
+  await withTempDir(directory => {
+    const builder = JSON.parse(fs.readFileSync(path.resolve('electron-builder.json'), 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+    const installer = path.join(directory, `${builder.productName} Setup ${pkg.version}.exe`);
+    const blockmap = `${installer}.blockmap`;
+    fs.writeFileSync(installer, Buffer.alloc(4096));
+    fs.writeFileSync(blockmap, '{}');
+
+    const removed = cleanupIncompleteNsisArtifacts(directory);
+
+    assert.deepEqual(removed, [installer, blockmap]);
+    assert.equal(fs.existsSync(installer), false);
+    assert.equal(fs.existsSync(blockmap), false);
+  });
+});
+
 test('preserves a valid NSIS installer and its blockmap', async () => {
   await withTempDir(directory => {
     const installer = path.join(directory, 'Quillix Setup 1.2.0.exe');
