@@ -19,6 +19,7 @@ import { app, BrowserWindow, dialog, shell, ipcMain } from 'electron';
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { installFaultReporter } from '../src/server/faultReporter.js';
 
 const HOST = '127.0.0.1';
 
@@ -459,12 +460,40 @@ if (!gotLock) {
 // These handlers exist to REPORT faults, never to hide them. Without them an
 // unhandled rejection in the main process is silent in the console and leaves
 // the user with a window that behaves oddly for no visible reason.
-// Renderer faults are intentionally NOT routed through process.exit: the
-// window stays alive so the user can read the error and report it.
-process.on('unhandledRejection', (reason) => {
-  console.error('[nuvro-ai] unhandled rejection:', reason instanceof Error ? reason.stack ?? reason.message : reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('[nuvro-ai] uncaught exception:', error?.stack ?? error);
+//
+// Policy:
+//   - Unhandled rejection -> report and keep serving (state is still defined).
+//   - Uncaught exception  -> FATAL. The main process was in an undefined
+//     state, so it must not keep driving the window or the server child.
+//     The app shuts down gracefully (server child stopped, error surfaced to
+//     the user) and exits with a non-zero code.
+installFaultReporter({
+  label: '[nuvro-ai]',
+  log: (message, error) => console.error(message, error ?? ''),
+  onFatalError: () => {
+    // Stop the server child first so no orphaned server survives the crash.
+    try {
+      stopServerProcess();
+    } catch (err) {
+      console.error('[nuvro-ai] error stopping server during fatal cleanup:', err);
+    }
+    appIsQuitting = true;
+    // Surface the failure to the user instead of a silent close. The dialog
+    // is best-effort: if no window exists yet, the log is the only channel.
+    try {
+      dialog.showErrorBox(
+        'NUVRO AI stopped unexpectedly',
+        'An unrecoverable error occurred in the desktop process.\r\n\r\n' +
+          'The local server was stopped to avoid operating on an inconsistent state.\r\n' +
+          'See the console log for the full stack trace.'
+      );
+    } catch {
+      // best effort
+    }
+    // Non-zero exit code so the failure is visible to any supervisor.
+    process.exitCode = 1;
+    app.quit();
+  },
+  fatalCleanupTimeoutMs: 3000,
+  fatalExitCode: 1,
 });

@@ -256,20 +256,97 @@ right mitigation for a memory-constrained host and should be preserved.
 dist/index.html                             1.20 kB │ gzip:   0.51 kB
 dist/assets/index-CYT-JVpi.css            111.45 kB │ gzip:  21.50 kB
 dist/assets/rolldown-runtime-B0Z9INg1.js    0.90 kB │ gzip:   0.51 kB
+dist/assets/CommandPalette-DO_RinW3.js      4.43 kB │ gzip:   1.66 kB
+dist/assets/OnboardingFlow-Rr6QJPS8.js     17.63 kB │ gzip:   4.58 kB
+dist/assets/SettingsScreen-DsyQ5j_j.js    107.41 kB │ gzip:  23.18 kB
 dist/assets/vendor-BAfov2kb.js            404.18 kB │ gzip: 128.71 kB
-dist/assets/index-BMYaoSeb.js             530.91 kB │ gzip: 122.36 kB
-dist/server.cjs                           1.2 MB
-dist/electron/main.cjs                    12.4 kB
-dist/electron/preload.cjs                  677 B
+dist/assets/index-D9yUia-k.js             403.77 kB │ gzip:  96.15 kB
+dist/server.cjs                           1.2 mb
+dist/electron/main.cjs                    13.4 kb
+dist/electron/preload.cjs                  677 b
 ```
 
-The renderer entry chunk is 530.91 kB (122.36 kB gzipped) and Vite emits a
-"chunks larger than 500 kB" advisory. Monaco is already split into its own
-chunk (`vite.config.ts` `manualChunks`) so the editor runtime does not block
-first paint. Further splitting of the app chunk was **not** attempted: it
-would require splitting the React runtime away from `@monaco-editor/react`,
-which the existing config comment identifies as the cause of React error
-#321 in production.
+**Codevian renderer bundle improvement (measured).** The baseline renderer
+entry chunk was 530.91 kB (122.36 kB gzipped) and Vite emitted a
+"chunks larger than 500 kB" advisory. Four overlays that are only rendered
+conditionally are now loaded on demand via `React.lazy()` +
+`<Suspense>`: `SettingsScreen` (116.1 KB source), `OnboardingFlow` (25.2 KB),
+`CommandPalette` (14.5 KB) and `DiffViewer` (5.9 KB).
+
+| Metric | Before | After | Delta |
+|---|---|---|---|
+| Renderer entry chunk | 530.91 kB | 403.77 kB | **−127.14 kB (−23.9 %)** |
+| Renderer entry chunk (gzip) | 122.36 kB | 96.15 kB | **−26.21 kB (−21.4 %)** |
+| Vite >500 kB advisory | emitted | **none** | resolved |
+| Build warnings | 2 `INEFFECTIVE_DYNAMIC_IMPORT` | **0** | resolved |
+
+`DiffViewer` was deliberately left as a **static** import: it is also
+statically imported by `WorkspaceView.tsx:15`, so a dynamic import of it
+produced an `INEFFECTIVE_DYNAMIC_IMPORT` warning without any bundle benefit
+(the module is only 5.9 KB).
+
+`CommandPalette` required a genuine module split to become code-splittable:
+`App.tsx` needs `useCommandPalette` / `CommandPaletteProvider` eagerly for the
+keyboard shortcut handler, so both lived in the same file as the UI and made
+the dynamic import ineffective. The state container (provider, hooks, built-in
+action list) moved to `src/components/CommandPaletteState.tsx`; the UI stayed
+in `src/components/CommandPalette.tsx` with its markup **byte-for-byte
+unchanged** (verified by rebuilding the file from the pre-change source).
+
+Monaco is still split into its own chunk (`vite.config.ts` `manualChunks`) so
+the editor runtime does not block first paint, and the React runtime is still
+kept together with `@monaco-editor/react` — splitting those is the documented
+cause of React error #321 in production and was not attempted.
+
+### 8.1 Server startup improvement (measured)
+
+`src/server/typescriptLanguageService.ts` imported the Monaco TypeScript
+runtime eagerly:
+
+```
+monaco-editor/languages/features/typescript/lib/typescriptServices.js
+→ node_modules/monaco-editor/esm/vs/languages/features/typescript/lib/typescriptServices.js
+→ 8 863 KB
+```
+
+That bundle was parsed on **every** server start, even though the language
+service is only used by three retrieval tools (`find_definition`,
+`find_references`, `type_diagnostics` — `toolRegistry.ts:1615-1643`).
+
+Measured cost of that single `require()` (5 runs, median):
+
+| Operation | Median |
+|---|---|
+| `require('…/typescriptServices.js')` | **547 ms** (485 / 506 / 547 / 560 / 626 ms) |
+| baseline empty `require` | 0 ms |
+
+The import is now **type-only** at module scope and the runtime is loaded on
+first use through a cached `loadTypeScript()` helper, so the 547 ms is deferred
+until a tool actually needs it.
+
+### 8.2 Duplicated `package.json` reads (fixed)
+
+Eight call sites each parsed `<root>/package.json` with their own inline
+`JSON.parse(fs.readFileSync(...))`, with **different** error semantics per
+site:
+
+| Site | File |
+|---|---|
+| build command lookup | `toolRegistry.ts:1872` |
+| test command lookup | `toolRegistry.ts:1926` |
+| lint command lookup | `toolRegistry.ts:1948` |
+| test-script reuse (×2) | `agentEngine.ts:1347`, `agentEngine.ts:1697` |
+| verification scripts | `agentEngine.ts:3221` |
+| language detection | `languageRunners.ts:175` |
+| project metadata | `indexer.ts:102` |
+| auto-test planning | `autoTestRunner.ts:58` |
+
+All eight now use the shared `src/server/packageManifest.ts`, which caches the
+parsed manifest and validates each hit against the file's `mtimeMs` + `size`
+so an edited `package.json` is still picked up immediately. The cache is
+bounded to 64 entries. A regression test
+(`src/server/__tests__/lazyLoadingContract.test.ts`) asserts that no inline
+manifest read remains in `src/server/`.
 
 ---
 
@@ -304,8 +381,37 @@ which the existing config comment identifies as the cause of React error
 | ID | Severity | Issue | Fix |
 |---|---|---|---|
 | SEC-1 | **P0** | Server child was killed with a bare `child.kill()` (SIGTERM) and no escalation. A child ignoring SIGTERM stalled the quit sequence indefinitely. | `stopServerProcess()` now escalates to `SIGKILL` after 5 s, with the watchdog timer `unref()`'d so shutdown never waits on it. |
-| REL-2 | **P0** | No `unhandledRejection` / `uncaughtException` handler existed **anywhere** in the repository (`git grep -c "unhandledRejection"` → exit 1, zero matches). Main-process faults were therefore invisible. | Added handlers in `electron/main.ts` that **log the stack trace**. They report faults; they deliberately do not swallow them and do not `process.exit`, so the window stays usable and the error is visible. |
+| REL-2 | **P0** | No `unhandledRejection` / `uncaughtException` handler existed **anywhere** in the repository (`git grep -c "unhandledRejection"` → exit 1, zero matches). Main-process faults were therefore invisible. | Added handlers in `electron/main.ts` that **log the stack trace**. Policy (see REL-5): unhandled rejections are reported and the process keeps serving; uncaught exceptions are reported and are **fatal** — the process performs a graceful cleanup and then exits with a non-zero code, because an uncaught exception leaves the process in an undefined state. |
 | REL-3 | **P1** | The Vitest suite failed because `.quillix/mission/*` (8 files required by `mission-control-contract.mjs`) was absent from this clean worktree. | Restored the genuine files from the in-repo checkpoint `_checkpoints/MISSION-CONTROL-20261108-143452/mission/`. The test and the contract now pass; the test was **not** weakened. |
+| REL-4 | **P1** | The **local server** had no process-level fault handlers at all. On modern Node an unhandled rejection terminates the process with a non-zero exit code, so a single stray rejection inside a background task (a provider poll, a file watcher, a test runner) killed the whole server and lost the user's workspace session — while the Electron main process already reported its own faults. | The handlers were extracted into `src/server/faultReporter.ts` and installed by **both** sides (`electron/main.ts`, `server.ts`). The policy is now explicit and in one reviewable place: faults are **reported with a stack**. Unhandled **rejections** keep the process serving; uncaught **exceptions** are fatal (see REL-5). Covered by `src/server/__tests__/faultReporter.test.ts` (11 tests) and `src/server/__tests__/faultPolicyContract.test.ts` (4 tests). |
+| REL-5 | **P0** | An **uncaught exception** leaves the process in an undefined state. The first implementation of REL-4 treated it like a rejection — it only logged and kept serving, because the handler was installed with `exitOnUncaughtException: false`. Continuing to serve requests, watchers and agent tasks from an undefined state risks silent data corruption: a partially written file, a half-applied patch, or a half-updated workspace index, with no error shown in the UI. | **Corrected.** The two fault classes now have **different, explicit policies**: <br>• `unhandledRejection` → report with a stack, **keep serving** (the surrounding state is still well defined). <br>• `uncaughtException` → report with a stack, run a **graceful cleanup hook**, then **exit with a non-zero code**. <br>The `exitOnUncaughtException` option was **removed entirely** so neither side can opt out. The server's cleanup hook aborts the in-flight agent controller, kills terminal children, stops project runs, closes tool extensions and the preview server, and stops accepting new requests — so no half-written file is left behind. The Electron main process stops the server child, shows the user an error dialog and quits. Both are covered by unit tests plus a source-level contract test that fails if the option ever returns. |
+
+---
+
+### 9.4 Live verification of the fault policy (executed against the built server)
+
+```
+npm run test:fault-policy-live
+
+PASS  unhandled rejection keeps the server alive and serving
+       — process still alive and still serving
+PASS  uncaught exception terminates the server
+       — process exited on its own (code=1, signal=null)
+
+PASS: fault policy verified live against the built server.
+```
+
+This is a **live** check against the real `dist/server.cjs`. The fault is
+injected into the running server process with `NODE_OPTIONS --require`, so the
+server's own bundled fault reporter handles it — no mocks, no stubs. It proves
+the two halves of the policy behave differently in a real process, not just in a
+unit test.
+
+The unit-level coverage is `src/server/__tests__/faultReporter.test.ts` (11
+tests) and the source-level guard is
+`src/server/__tests__/faultPolicyContract.test.ts` (4 tests), which fails if
+the removed `exitOnUncaughtException` escape hatch is ever reintroduced or if
+either side stops wiring a fatal cleanup hook.
 
 ---
 
@@ -432,9 +538,10 @@ Files: `scripts/smoke/electron-launch-contract.cjs` (driver) and
 | RISK-1 | P2 | `agentEngine.ts` is 5,054 lines with 265 method definitions in one class — high coupling, difficult to test in isolation. | **OpenCode** | Agent engine is another agent's assigned subsystem; a split this large would create cross-agent conflicts. |
 | RISK-2 | P2 | `src/App.tsx` is a 1,202-line component holding 40 `useState` calls plus 13 `useCallback`, 12 `useEffect` and 7 `useRef` hooks — every state change re-renders the whole tree. | **Cline** | UI/UX is Cline's assignment; no UI rewrite was performed. |
 | RISK-3 | — | **RESOLVED by Codevian.** `@composio/core` was declared in `dependencies` but imported nowhere (0 of 371 scanned files). `src/server/offlineCodingPlugins.ts:107` referenced only the *string* `@composio/core@0.27.0` as plugin manifest metadata, and the `composio_health` tool (`offlineCodingPlugins.ts:243`) only reads env vars and `composio.{json,yaml}` config files — it never imports the package. | shared | **Removed** after verifying zero runtime usage (see §11). |
-| RISK-4 | P3 | `src/App.tsx.backup` (49.2 KB) is a stale duplicate of the root component. | Cline | Removing a file another agent may be actively diffing against is unsafe without coordination. |
+| RISK-4 | — | **RESOLVED by Codevian.** `src/App.tsx.backup` (49.2 KB) and `src/components/EditorArea_backup.tsx` (58.5 KB) were stale duplicates of the root component and the editor. Both were verified to have **zero** references across all 679 project files (name search for `App.tsx.backup` and `EditorArea_backup` returned no matches) and are excluded from the Vite build graph, so they were dead weight shipped in the repository but never bundled. | shared | **Deleted.** Both were tracked in git, so the history preserves them. |
 | RISK-5 | P3 | `server.ts` is 2,088 lines and registers 107 routes inline — a large surface in one module. | Kilo / backend | Route extraction is a broad, high-regression-risk refactor of the backend surface. |
-| RISK-6 | P4 | `vite` reports the app chunk exceeds 500 kB (530.91 kB raw / 122.36 kB gzip). | frontend | Monaco is already split; further splitting risks React #321 per the config comment. |
+| RISK-6 | — | **RESOLVED by Codevian.** `vite` reported the app chunk exceeded 500 kB (530.91 kB raw / 122.36 kB gzip). | shared | **Fixed** by lazy-loading the conditionally-rendered overlays — the entry chunk is now 403.77 kB (96.15 kB gzip) and the advisory is gone (see §8). |
+| RISK-7 | P4 | The renderer entry chunk is still 403.77 kB because `WorkspaceView`, `WorkbenchLayout`, `ChatPanel`, `DeveloperCockpit` and `ProviderProfiles` are all statically imported even though the workspace/studio is only rendered after the user opens a project (`App.tsx:991` `studioVisited || studioActive`). | frontend | These components share state and props with `App.tsx`; making them lazy requires a prop-contract refactor across Cline's UI surface. The same split that worked for `CommandPalette` (state vs UI) would apply, but it touches Cline's assigned files. |
 
 ---
 

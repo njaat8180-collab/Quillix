@@ -22,6 +22,14 @@
 | 10 | Dependency analysis + removal | `@composio/core` removed after verifying 0 imports; lockfile 13 packages removed, 0 version changes |
 | 11 | Final regression | Vitest 835/835, tsc exit 0, build exit 0, 31-stage smoke suite, 7 contract suites |
 | 12 | Git commit | `3dbe7cd` verified, clean tree |
+| 13 | Renderer bundle optimization | Lazy-loaded 4 conditional overlays: entry chunk **530.91 kB → 403.77 kB (−23.9 %)**, gzip 122.36 → 96.15 kB, Vite >500 kB advisory **gone** |
+| 14 | Server startup optimization | Deferred the **8.86 MB** Monaco TypeScript runtime load: measured **547 ms** removed from every server start |
+| 15 | Duplication removal | 8 duplicated inline `package.json` read+parse sites consolidated into `src/server/packageManifest.ts` (mtime-validated, 64-entry bounded cache) |
+| 16 | Reliability hardening | Shared `src/server/faultReporter.ts` — unhandled **rejections** are reported and the process keeps serving; uncaught **exceptions** are **fatal** (graceful cleanup → exit with non-zero code) |
+| 17 | Dead code removal | Deleted `src/App.tsx.backup` (49.2 KB) + `src/components/EditorArea_backup.tsx` (58.5 KB) after verifying **0 references** across 679 files |
+| 18 | Command palette module split | State container → `src/components/CommandPaletteState.tsx` so the UI is genuinely code-splittable; UI markup kept byte-for-byte identical |
+| 19 | **Reviewer fix (REL-5)** | Uncaught exceptions are now **fatal**: report → graceful cleanup → exit(code 1). The `exitOnUncaughtException: false` escape hatch was **removed entirely**. Unhandled rejections still keep the server serving. |
+| 20 | Fault-policy verification | 11 unit tests + 4 source-level contract tests + **live** verification against the built `dist/server.cjs` (rejection → stays alive/serving; exception → exits on its own, code 1) |
 
 ## Pending / blocked
 
@@ -41,17 +49,18 @@
 | Command | Result |
 |---|---|
 | `npm ci` | exit 0 — 483 packages |
-| `npm test` | **835 passed / 0 failed** (83 files, 744.19 s) |
-| `npm run lint` | exit 0 |
-| `npm run build` | exit 0 |
+| `npm test` | **862 passed / 1 skipped / 0 failed** (87 files, 644.74 s) |
+| `npm run lint` | exit 0 (`tsc --noEmit`) |
+| `npm run build` | exit 0 — 4 artifacts, 0 warnings, entry chunk 403.77 kB (no >500 kB advisory) |
 | `npm run test:electron-launch` | **17/17** |
-| `npm run test:dependency-audit` | PASS — 21 deps, all imported, 369 files |
+| `npm run test:fault-policy-live` | **2/2** — rejection keeps the server alive/serving; uncaught exception exits the built server with code 1 |
+| `npm run test:dependency-audit` | PASS — 21 deps, all imported, 375 files |
 | `npm run test:mission-control` | PASS — 44 checks |
 | `npm run test:offline-plugins` | PASS — 16 packs / 29 tools |
 | `npm run test:production-surface` | PASS — 22 checks |
 | `npm run test:crash-boundary` | PASS |
 | `npm run test:settings-health` | PASS — 18 checks |
-| `npm run test:smoke` | **PASS** — all 31 stages verified individually |
+| `npm run test:smoke` | **PASS** — all 31 stages verified individually + fault-policy live stage |
 | `npm run test:benchmark-preflight` | PASS 2/2 (initially failed: orphaned `dist/server.cjs` saturated CPU at 100% → resource guard correctly paused → `EBUSY` on locked sandbox. Orphan terminated, **no source change needed**) |
 
 ## Build results
