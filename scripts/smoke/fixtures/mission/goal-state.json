@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "mission": "QUILLIX > CURSOR",
+  "startedAt": "2026-11-08T00:00:00+05:30",
+  "deadline": "2026-11-11T23:59:00+05:30",
+  "releaseTarget": "2026-11-12T00:00:00+05:30",
+  "phase": {
+    "id": "P4",
+    "title": "Final acceptance",
+    "startedAt": "2026-11-11T00:00:00+05:30",
+    "endsAt": "2026-11-11T23:59:00+05:30",
+    "note": "Fixture timeline. Mirrors the shape the tracker must render; no operator progress is claimed."
+  },
+  "currentTask": "Mission-control contract fixture: prove the tracker is honest from a clean checkout",
+  "counts": { "completed": 4, "inProgress": 1, "pending": 2, "total": 7 },
+  "verifiedProgressPercent": 57,
+  "nextTasks": [
+    "Validate the same contract against live mission state when present",
+    "Keep the fixture counts internally consistent",
+    "Never claim unverified progress in the fixture"
+  ],
+  "blockers": [
+    { "id": "B_LIVE_MODEL", "severity": "medium", "title": "Live provider credentials may be absent on offline hosts", "approvalRequired": false },
+    { "id": "B_PACKAGING", "severity": "medium", "title": "Windows packaging depends on host resources and can legitimately pause", "approvalRequired": false }
+  ],
+  "tests": [
+    { "name": "test:mission-control", "status": "pass", "detail": "PASS against this fixture (missionStateSource=fixture)" },
+    { "name": "missionState.test.ts", "status": "pass", "detail": "persisted-state case reads this fixture when live state is absent" }
+  ],
+  "benchmarks": {
+    "cursorBaseline": "not-collected",
+    "harnessVerified": false,
+    "note": "Fixture data: no Cursor baseline and no live benchmark numbers are claimed."
+  },
+  "activity": {
+    "lastVerifiedAt": null,
+    "current": "Fixture: contract must stay green on a clean checkout",
+    "note": "No operator activity is asserted by this fixture."
+  },
+  "latestCheckpoint": "scripts/smoke/fixtures/mission",
+  "nextPlannedTask": "Keep the contract reproducible on fresh clones and worktrees",
+  "releaseGates": [
+    { "id": "G1", "title": "No known critical bugs", "status": "open" },
+    { "id": "G2", "title": "Core coding workflows tested", "status": "open", "detail": "Validated by the live pytest/vitest/e2e suites, not by this fixture" },
+    { "id": "G3", "title": "Build succeeds", "status": "open", "detail": "Validated by npm run build" },
+    { "id": "G4", "title": "Secrets protected (DPAPI, redaction)", "status": "open" },
+    { "id": "G5", "title": "Real provider workflows tested", "status": "open", "detail": "Requires credentials" },
+    { "id": "G6", "title": "Regression results documented", "status": "open" },
+    { "id": "G7", "title": "Windows package verified", "status": "open" },
+    { "id": "G8", "title": "Benchmark evidence preserved", "status": "open" },
+    { "id": "G9", "title": "Limitations disclosed", "status": "pass", "detail": "Fixture discloses its own limits" }
+  ]
+}

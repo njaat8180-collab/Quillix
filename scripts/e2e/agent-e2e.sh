@@ -122,9 +122,24 @@ NODE_ENV=production PORT="$PORT" QUILLIX_SETTINGS_PATH="$SETTINGS_NATIVE" \
   node --require "$REPO_ROOT/scripts/e2e/fetch-polyfill.cjs" "$SERVER_BUNDLE" \
   > "$WORK_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 2.5
 
-if ! curl -s "http://127.0.0.1:$PORT/api/health" > /dev/null 2>&1; then
+# Wait for the health endpoint to answer instead of guessing at a delay: on
+# Windows the bundled server (esbuild + dependency scan) can legitimately need
+# 10-30s to boot, and a fixed short sleep fails the whole harness with an empty
+# log on a slow or memory-constrained host.
+SERVER_READY=0
+for _ in $(seq 1 60); do
+  if curl -s "http://127.0.0.1:$PORT/api/health" > /dev/null 2>&1; then
+    SERVER_READY=1
+    break
+  fi
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    say "Server process exited before it became healthy — log:"; cat "$WORK_DIR/server.log"; exit 1
+  fi
+  sleep 1
+done
+
+if [ "$SERVER_READY" -ne 1 ]; then
   say "Server did not start — log:"; cat "$WORK_DIR/server.log"; exit 1
 fi
 

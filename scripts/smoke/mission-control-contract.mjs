@@ -16,15 +16,26 @@ const project = rootIndex >= 0 && process.argv[rootIndex + 1]
   : path.resolve(import.meta.dirname, '../..');
 
 const read = (...parts) => fs.readFileSync(path.join(project, ...parts), 'utf8');
-const missionDir = path.join(project, '.quillix', 'mission');
+const fixtureMissionDir = path.resolve(import.meta.dirname, 'fixtures', 'mission');
+const missionStateFile = 'goal-state.json';
+const liveMissionDir = path.join(project, '.quillix', 'mission');
+// The persisted mission state is intentionally NOT tracked (`**/.quillix/` is
+// gitignored so agent-run workspaces stay clean), so a fresh clone or a fresh
+// git worktree carries no mission state at all. Validate the live operator state
+// when the tree actually has it, and fall back to the tracked fixture otherwise,
+// so this contract is reproducible on any checkout instead of failing purely
+// because of the environment.
+const missionDir = fs.existsSync(path.join(liveMissionDir, missionStateFile)) ? liveMissionDir : fixtureMissionDir;
+const missionStateSource = missionDir === liveMissionDir ? 'live' : 'fixture';
+const missionRead = (...parts) => fs.readFileSync(path.join(missionDir, ...parts), 'utf8');
 
 // --- The persisted goal state must exist, parse, and be consistent. ---
-const requiredMissionFiles = ['GOAL.md', 'ROADMAP.md', 'TASKS.md', 'PROGRESS.md', 'BENCHMARKS.md', 'BLOCKERS.md', 'SESSION_MEMORY.md', 'goal-state.json'];
+const requiredMissionFiles = ['GOAL.md', 'ROADMAP.md', 'TASKS.md', 'PROGRESS.md', 'BENCHMARKS.md', 'BLOCKERS.md', 'SESSION_MEMORY.md', missionStateFile];
 for (const name of requiredMissionFiles) {
   assert.ok(fs.existsSync(path.join(missionDir, name)), `.quillix/mission/${name} is missing`);
 }
 
-const goalState = JSON.parse(read('.quillix', 'mission', 'goal-state.json'));
+const goalState = JSON.parse(missionRead(missionStateFile));
 assert.ok(typeof goalState.deadline === 'string' && !Number.isNaN(Date.parse(goalState.deadline)), 'goal-state.json must carry a parseable deadline');
 const { completed, inProgress, pending, total } = goalState.counts;
 assert.equal(total, completed + inProgress + pending, 'goal-state.json counts must be internally consistent');
@@ -150,8 +161,10 @@ for (const [name, pattern] of checks) assert.match(source, pattern, name);
 
 console.log(JSON.stringify({
   status: 'PASS',
+  missionStateSource,
+  missionStateDir: path.relative(project, missionDir),
   files: [
-    '.quillix/mission/*',
+    (missionStateSource === 'live' ? '.quillix/mission/*' : 'scripts/smoke/fixtures/mission/*'),
     'src/shared/missionState.ts',
     'server.ts',
     'src/services/apiBridge.ts',
@@ -162,4 +175,5 @@ console.log(JSON.stringify({
     'extensions/quillix-mission-control/extension.js',
   ],
   checks: checks.length + extensionChecks.length + 24,
+  missionStateFiles: requiredMissionFiles.length,
 }));
