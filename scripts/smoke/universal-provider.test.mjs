@@ -11,6 +11,8 @@ fs.writeFileSync(path.join(tmp,'package.json'),JSON.stringify({type:'module'}));
 fs.mkdirSync(path.join(tmp,'shared'),{recursive:true});
 const pacingSource=fs.readFileSync(path.join(root,'src','shared','providerPacing.ts'),'utf8');
 fs.writeFileSync(path.join(tmp,'shared','providerPacing.js'),stripTypeScriptTypes(pacingSource,{mode:'transform'}));
+const envNumbersSource=fs.readFileSync(path.join(root,'src','shared','envNumbers.ts'),'utf8');
+fs.writeFileSync(path.join(tmp,'shared','envNumbers.js'),stripTypeScriptTypes(envNumbersSource,{mode:'transform'}));
 // universal.ts reads the shared Overdrive flag so its pacing/cooldown bypasses
 // follow live settings; keep that dependency beside the copied modules too.
 const overdriveStateSource=fs.readFileSync(path.join(root,'src','shared','overdriveState.ts'),'utf8');

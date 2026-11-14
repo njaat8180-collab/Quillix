@@ -23,6 +23,8 @@ const providerPresets = fs.readFileSync(path.join(root, 'src/shared/providerPres
 fs.writeFileSync(path.join(temp, 'shared', 'providerPresets.js'), stripTypeScriptTypes(providerPresets, { mode: 'transform' }));
 const providerPacing = fs.readFileSync(path.join(root, 'src/shared/providerPacing.ts'), 'utf8');
 fs.writeFileSync(path.join(temp, 'shared', 'providerPacing.js'), stripTypeScriptTypes(providerPacing, { mode: 'transform' }));
+const envNumbers = fs.readFileSync(path.join(root, 'src/shared/envNumbers.ts'), 'utf8');
+fs.writeFileSync(path.join(temp, 'shared', 'envNumbers.js'), stripTypeScriptTypes(envNumbers, { mode: 'transform' }));
 // universal.ts reads the shared Overdrive flag so its pacing/cooldown bypasses
 // follow live settings; keep that dependency beside the copied modules too.
 const overdriveState = fs.readFileSync(path.join(root, 'src/shared/overdriveState.ts'), 'utf8');
@@ -31,7 +33,7 @@ fs.writeFileSync(path.join(temp, 'shared', 'overdriveState.js'), stripTypeScript
 // must be present in this isolated fixture as well.
 for (const filename of ['sarvam', 'resourceGuard', 'brainRegistry', 'universal', 'openai', 'settings', 'providerStream', 'providerProfiles', 'rateLimitService', 'promptCache', 'providerKeyRotation']) {
   let source = fs.readFileSync(path.join(root, 'src/server', `${filename}.ts`), 'utf8');
-  source = source.replaceAll("../shared/providerPacing.js", "./shared/providerPacing.js").replaceAll("../shared/overdriveState.js", "./shared/overdriveState.js");
+  source = source.replaceAll("../shared/providerPacing.js", "./shared/providerPacing.js").replaceAll("../shared/overdriveState.js", "./shared/overdriveState.js").replaceAll("../shared/envNumbers.js", "./shared/envNumbers.js");
   if (filename === 'settings') {
     source = source
       .replaceAll("../shared/modelDefaults.js", "./shared/modelDefaults.js")
